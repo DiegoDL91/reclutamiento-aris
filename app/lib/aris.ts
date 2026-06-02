@@ -1,20 +1,25 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Usamos la variable de entorno, es lo correcto
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(apiKey);
-
 export const arisBrain = async (mensajeUsuario: string) => {
+  // Intentamos leer la llave de dos formas por si acaso
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return "Error: No encontré la llave de API en Vercel. Revisa las variables de entorno.";
+  }
+
   try {
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const promptSistema = `Eres ARIS, la IA de Rio Logística. Entrevistas para Auxiliar de Almacén. Sé breve, pregunta nombre y si tiene botas de casquillo.`;
-
+    const promptSistema = "Eres ARIS, IA de Rio Logística. Entrevista al candidato de forma breve (2 líneas).";
+    
     const result = await model.generateContent(`${promptSistema}\n\nCandidato: ${mensajeUsuario}`);
     const response = await result.response;
     return response.text();
+    
   } catch (error: any) {
-    console.error("ERROR GEMINI:", error.message);
-    return "¡Hola! Estamos terminando de configurar mi cerebro. Dame un minuto y envíame otro 'Hola'.";
+    // ESTO NOS DIRÁ EL ERROR REAL EN WHATSAPP
+    return "Error de Google: " + error.message;
   }
 };
