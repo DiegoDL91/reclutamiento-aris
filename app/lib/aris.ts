@@ -1,29 +1,31 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
+// Forzamos la lectura de la llave
+const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+const genAI = new GoogleGenerativeAI(apiKey);
 
 export const arisBrain = async (mensajeUsuario: string) => {
   try {
+    if (!apiKey) throw new Error("Llave de API no encontrada");
+
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const promptSistema = `
-      Eres ARIS, la IA de reclutamiento de Rio Logística.
-      Tu misión es entrevistar al candidato para el puesto de Auxiliar de Almacén.
+      Eres ARIS, la IA de Rio Logística.
+      Tu misión es entrevistar al candidato.
       
       REGLAS:
-      1. Sé profesional y directo.
-      2. Pregunta primero el NOMBRE completo si no lo sabes.
-      3. Luego pregunta si tiene BOTAS DE CASQUILLO (esto es OBLIGATORIO).
-      4. Pregunta si tiene DOCUMENTACIÓN original completa.
-      
-      CONTESTA CORTO, MÁXIMO 2 LINEAS.
+      1. Sé profesional y muy breve (máximo 2 renglones).
+      2. Saluda y pregunta el nombre si es el primer mensaje.
+      3. Pregunta si tiene botas de casquillo.
     `;
 
-    const result = await model.generateContent(`${promptSistema}\n\nCandidato dice: ${mensajeUsuario}`);
+    const result = await model.generateContent(`${promptSistema}\n\nCandidato: ${mensajeUsuario}`);
     const response = await result.response;
     return response.text();
   } catch (error: any) {
-    console.error("ERROR GEMINI:", error);
-    return "¡Hola! Estamos actualizando mis sistemas. ¿Podrías enviarme un 'Hola' de nuevo en 10 segundos?";
+    // Si falla, nos dirá el porqué en los logs de Vercel
+    console.error("ERROR CRÍTICO ARIS:", error.message);
+    return "¡Hola! Mi sistema está terminando de arrancar. Envíame otro 'Hola' en 5 segundos y ya estaré lista.";
   }
 };
