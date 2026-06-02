@@ -5,16 +5,23 @@ import { arisBrain } from '../../lib/aris';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    
+    // 1. FILTRO DE SEGURIDAD: Solo procesar mensajes de texto reales
     const mensajeTexto = body.data?.message?.conversation || body.data?.message?.extendedTextMessage?.text;
+    const isStatus = body.event === "messages.upsert"; // Solo cuando llega un mensaje nuevo
+    const fromMe = body.data?.key?.fromMe; // Ignorar si el mensaje lo mandó la propia ARIS
+
+    if (!isStatus || fromMe || !mensajeTexto) {
+      return NextResponse.json({ status: 'ignored' });
+    }
+
     const numeroTelefono = body.data?.key?.remoteJid?.split('@')[0];
-    const nombreWhatsApp = body.data?.pushName;
+    const nombreWhatsApp = body.data?.pushName || 'Candidato Nuevo';
 
-    if (!mensajeTexto || !numeroTelefono) return NextResponse.json({ status: 'No data' });
-
-    // 1. ARIS piensa la respuesta
+    // 2. ARIS piensa la respuesta
     const respuestaAris = await arisBrain(mensajeTexto, []);
 
-    // 2. ORDEN DE ENVIAR (La boca de ARIS)
+    // 3. ENVIAR de regreso a WhatsApp
     await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
       method: 'POST',
       headers: {
@@ -27,7 +34,7 @@ export async function POST(req: Request) {
       })
     });
 
-    // 3. Guardar en la base de datos
+    // 4. Guardar en Supabase
     await supabase.from('candidatos_respuestas').upsert({
       nombre_completo: nombreWhatsApp,
       telefono_whatsapp: numeroTelefono,
@@ -38,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'success' });
 
   } catch (error: any) {
-    console.error(error);
+    console.error('ERROR ARIS:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
