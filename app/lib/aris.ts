@@ -1,23 +1,29 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Inicializamos con la llave
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
 
-export const arisBrain = async (mensajeUsuario: string, historial: any[]) => {
+export const arisBrain = async (mensajeUsuario: string) => {
   try {
-    // Usamos la versión 1.5-flash que es la más rápida y gratis
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const promptSistema = "Eres ARIS, asistente de reclutamiento de Rio Logística. Sé breve, amable y pregunta por botas de casquillo y documentos.";
+    const promptSistema = `
+      Eres ARIS, la IA de reclutamiento de Rio Logística.
+      Tu misión es entrevistar al candidato para el puesto de Auxiliar de Almacén.
+      
+      REGLAS:
+      1. Sé profesional y directo.
+      2. Pregunta primero el NOMBRE completo si no lo sabes.
+      3. Luego pregunta si tiene BOTAS DE CASQUILLO (esto es OBLIGATORIO).
+      4. Pregunta si tiene DOCUMENTACIÓN original completa.
+      
+      CONTESTA CORTO, MÁXIMO 2 LINEAS.
+    `;
 
-    const chat = model.startChat({
-      history: historial,
-    });
-
-    const result = await chat.sendMessage(`${promptSistema} \n\n Candidato dice: ${mensajeUsuario}`);
+    const result = await model.generateContent(`${promptSistema}\n\nCandidato dice: ${mensajeUsuario}`);
     const response = await result.response;
     return response.text();
-  } catch (error) {
-    return "Hola, estoy recibiendo muchos mensajes. ¿Podrías repetirme eso?";
+  } catch (error: any) {
+    console.error("ERROR GEMINI:", error);
+    return "¡Hola! Estamos actualizando mis sistemas. ¿Podrías enviarme un 'Hola' de nuevo en 10 segundos?";
   }
 };
