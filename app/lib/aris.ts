@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
+export const arisBrain = async (mensajeUsuario: any, telefono: any) => {
   const apiKey = process.env.GROQ_API_KEY;
 
   const { data: info } = await supabase

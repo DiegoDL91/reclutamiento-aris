@@ -13,15 +13,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored_fromme' });
     }
 
-    const texto = body.data?.message?.conversation
-      || body.data?.message?.extendedTextMessage?.text;
-    const tel = body.data?.key?.remoteJid?.split('@')[0];
+    const texto: string = body.data?.message?.conversation
+      || body.data?.message?.extendedTextMessage?.text
+      || '';
+    const tel: string = body.data?.key?.remoteJid?.split('@')[0] || '';
 
     if (!texto || !tel) {
       return NextResponse.json({ status: 'ignored_no_text' });
     }
 
-    const rawRespuesta = await arisBrain(texto as string, tel as string);
+    const rawRespuesta = await arisBrain(texto, tel);
     const objetoIA = JSON.parse(rawRespuesta);
     const ex = objetoIA.extraccion || {};
 
