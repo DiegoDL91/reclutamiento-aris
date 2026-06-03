@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export const arisBrain = async (mensajeUsuario: any, telefono: any) => {
+export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<string> => {
   const apiKey = process.env.GROQ_API_KEY;
 
   const { data: info } = await supabase
@@ -9,7 +9,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any) => {
     .eq('telefono_whatsapp', telefono)
     .maybeSingle();
 
-  // Reconstruimos la conversación previa
   let historial: { role: string; content: string }[] = [];
   if (info?.historial) {
     try { historial = JSON.parse(info.historial); } catch {}
@@ -73,15 +72,13 @@ Campos válidos para "extraccion": nombre_completo, edad, zona_vivienda, turno_p
     { role: 'user', content: mensajeUsuario }
   ];
 
-  // Detección de cedis por zona (respaldo, por si la IA no lo pone)
-  const detectarCedis = (txt: string): string | null => {
+  const detectarCedis = (txt: any): string | null => {
     const z = (txt || '').toLowerCase();
     if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial';
     if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla/.test(z)) return 'UPS';
     return null;
   };
 
-  // Reintentamos hasta 3 veces (el free tier a veces falla)
   for (let intento = 0; intento < 3; intento++) {
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -104,7 +101,6 @@ Campos válidos para "extraccion": nombre_completo, edad, zona_vivienda, turno_p
 
       const parsed = JSON.parse(texto);
 
-      // Forzamos el cedis correcto según la zona conocida
       if (info?.vacante_cedis) {
         parsed.cedis = info.vacante_cedis;
       } else {
@@ -112,7 +108,6 @@ Campos válidos para "extraccion": nombre_completo, edad, zona_vivienda, turno_p
         if (detectado) parsed.cedis = detectado;
       }
 
-      // Guardamos la conversación actualizada para la siguiente vuelta
       parsed._historial = [
         ...historial,
         { role: 'user', content: mensajeUsuario },
@@ -123,16 +118,15 @@ Campos válidos para "extraccion": nombre_completo, edad, zona_vivienda, turno_p
 
     } catch (e) {
       console.error(`Groq intento ${intento + 1} falló:`, e);
-      // Si fue el último intento, NO reiniciamos el flujo (eso era lo que rompía todo)
-      if (intento === 2) {
-        return JSON.stringify({
-          pregunta: 'Perdón, tuve un pequeño detalle técnico. ¿Me repites tu último mensaje? 🙏',
-          estatus: 'Nuevo',
-          cedis: info?.vacante_cedis || null,
-          extraccion: {},
-          _historial: [...historial, { role: 'user', content: mensajeUsuario }]
-        });
-      }
     }
   }
+
+  // Si los 3 intentos fallaron, devolvemos esto SIEMPRE (garantiza el return)
+  return JSON.stringify({
+    pregunta: 'Perdón, tuve un pequeño detalle técnico. ¿Me repites tu último mensaje? 🙏',
+    estatus: 'Nuevo',
+    cedis: info?.vacante_cedis || null,
+    extraccion: {},
+    _historial: [...historial, { role: 'user', content: mensajeUsuario }]
+  });
 };
