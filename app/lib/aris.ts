@@ -13,10 +13,8 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
 
   // LISTA DE MODELOS (USANDO LOS QUE TÚ ME DIJISTE)
   const modelos = [
-    "gemini-1.5-flash", // Este es el ID técnico real del 3.5
-    "gemini-1.5-flash-8b", 
-    "gemini-1.5-pro",
-    "gemini-pro"
+    "gemini-3.5-flash", 
+    "gemini-3.1-flash-lite",
   ];
 
   const instrucciones = `
