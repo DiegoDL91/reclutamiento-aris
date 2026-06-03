@@ -9,7 +9,7 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
     .eq('telefono_whatsapp', telefono)
     .maybeSingle();
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
 Eres ARIS, una reclutadora amigable y profesional de Rio Logística.
@@ -59,9 +59,15 @@ RESPONDE ÚNICAMENTE CON ESTE JSON, SIN TEXTO EXTRA, SIN MARKDOWN:
     });
 
     const resData = await response.json();
-    const texto = resData.candidates[0].content.parts[0].text;
     
-    // Verificar que sea JSON válido
+    console.log("GEMINI RAW:", JSON.stringify(resData).slice(0, 500));
+
+    if (!resData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.error("Gemini sin respuesta:", JSON.stringify(resData));
+      throw new Error("Gemini no devolvió texto");
+    }
+
+    const texto = resData.candidates[0].content.parts[0].text;
     const parsed = JSON.parse(texto);
     return JSON.stringify(parsed);
 
