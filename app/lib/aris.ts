@@ -13,8 +13,7 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
 
   // LISTA DE MODELOS (USANDO LOS QUE TÚ ME DIJISTE)
   const modelos = [
-    "gemini-3.5-flash", 
-    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash" 
   ];
 
   const instrucciones = `
