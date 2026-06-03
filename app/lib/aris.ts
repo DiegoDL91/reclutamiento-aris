@@ -1,15 +1,13 @@
 import { supabase } from './supabase';
 
 export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   const { data: info } = await supabase
     .from('candidatos_respuestas')
     .select('*')
     .eq('telefono_whatsapp', telefono)
     .maybeSingle();
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
 Eres ARIS, una reclutadora amigable y profesional de Rio Logística.
@@ -44,37 +42,31 @@ RESPONDE ÚNICAMENTE CON ESTE JSON, SIN TEXTO EXTRA, SIN MARKDOWN:
 `;
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({
-        contents: [{ 
-          parts: [{ text: prompt }] 
-        }],
-        generationConfig: { 
-          response_mime_type: "application/json",
-          temperature: 0.3
-        }
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
       })
     });
 
     const resData = await response.json();
-    
-    console.log("GEMINI RAW:", JSON.stringify(resData).slice(0, 500));
+    console.log("GROQ RAW:", JSON.stringify(resData).slice(0, 300));
 
-    if (!resData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      console.error("Gemini sin respuesta:", JSON.stringify(resData));
-      throw new Error("Gemini no devolvió texto");
-    }
-
-    const texto = resData.candidates[0].content.parts[0].text;
+    const texto = resData.choices[0].message.content;
     const parsed = JSON.parse(texto);
     return JSON.stringify(parsed);
 
   } catch (e) {
-    console.error("Gemini error:", e);
+    console.error("Groq error:", e);
     return JSON.stringify({ 
-      "pregunta": "Disculpa, hubo un problema. ¿Me repites tu nombre?", 
+      "pregunta": "Hola, ¿cuál es tu nombre completo?", 
       "extracccion": { "nombre": null, "edad": null, "botas": null } 
     });
   }
