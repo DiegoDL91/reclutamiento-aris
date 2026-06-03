@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     if (body.event !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored_event' });
     }
-
     if (body.data?.key?.fromMe === true) {
       return NextResponse.json({ status: 'ignored_fromme' });
     }
@@ -22,19 +21,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored_no_text' });
     }
 
-    const rawRespuesta = await arisBrain(texto, tel);
+    const rawRespuesta = await arisBrain(texto as string, tel as string);
     const objetoIA = JSON.parse(rawRespuesta);
-    const ex = objetoIA.extracccion;
+    const ex = objetoIA.extraccion || {};
 
-    const update: any = {
+    // === GUARDADO 1: lo crítico (memoria + estado). NUNCA debe fallar. ===
+    const critico: any = {
       telefono_whatsapp: tel,
       estatus: objetoIA.estatus || 'Nuevo'
     };
+    if (objetoIA._historial) critico.historial = JSON.stringify(objetoIA._historial);
+    if (objetoIA.cedis && objetoIA.cedis !== 'null') critico.vacante_cedis = objetoIA.cedis;
 
-    if (objetoIA.cedis && objetoIA.cedis !== 'null') {
-      update.vacante_cedis = objetoIA.cedis;
-    }
+    const { error: e1 } = await supabase
+      .from('candidatos_respuestas')
+      .upsert(critico, { onConflict: 'telefono_whatsapp' });
+    if (e1) console.error('Error guardando memoria:', e1.message);
 
+    // === GUARDADO 2: los datos extraídos. Si una columna no existe, solo falla esto. ===
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
       'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_hijos',
@@ -47,18 +51,23 @@ export async function POST(req: Request) {
       'reingreso', 'banco'
     ];
 
-    campos.forEach(campo => {
-      if (ex?.[campo] !== null && ex?.[campo] !== undefined) {
-        update[campo] = ex[campo];
+    const datos: any = { telefono_whatsapp: tel };
+    let hayDatos = false;
+    campos.forEach(c => {
+      if (ex?.[c] !== null && ex?.[c] !== undefined) {
+        datos[c] = ex[c];
+        hayDatos = true;
       }
     });
 
-    const { error: dbError } = await supabase
-      .from('candidatos_respuestas')
-      .upsert(update, { onConflict: 'telefono_whatsapp' });
+    if (hayDatos) {
+      const { error: e2 } = await supabase
+        .from('candidatos_respuestas')
+        .upsert(datos, { onConflict: 'telefono_whatsapp' });
+      if (e2) console.error('Error guardando datos (revisa nombres de columnas):', e2.message);
+    }
 
-    if (dbError) console.error("DB Error:", dbError.message);
-
+    // === Respondemos por WhatsApp ===
     await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
       method: 'POST',
       headers: {
@@ -71,7 +80,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'success' });
 
   } catch (error: any) {
-    console.error("Route error:", error.message);
+    console.error('Route error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

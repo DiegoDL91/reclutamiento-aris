@@ -1,21 +1,5 @@
 import { supabase } from './supabase';
 
-// Esta función decide el cedis según la zona, sin IA
-function detectarCedis(zona: string): string | null {
-  const z = zona.toLowerCase();
-  if (z.includes('azcapotzalco') || z.includes('rosario') || z.includes('vallejo') || 
-      z.includes('cdmx') || z.includes('ciudad de mexico') || z.includes('popotla') ||
-      z.includes('norte') || z.includes('claveria')) {
-    return 'Editorial';
-  }
-  if (z.includes('cuautitlan') || z.includes('izcalli') || z.includes('sabino') || 
-      z.includes('edo') || z.includes('estado de mexico') || z.includes('tultitlan') ||
-      z.includes('tultepec') || z.includes('coacalco') || z.includes('tlalnepantla')) {
-    return 'UPS';
-  }
-  return null;
-}
-
 export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
   const apiKey = process.env.GROQ_API_KEY;
 
@@ -25,206 +9,130 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
     .eq('telefono_whatsapp', telefono)
     .maybeSingle();
 
-  // El CÓDIGO decide el paso, no la IA
-  let paso = '';
-  let cedisDetectado: string | null = null;
-
-  if (!info?.nombre_completo) {
-    paso = 'pedir_nombre';
-  } else if (!info?.edad) {
-    paso = 'pedir_edad';
-  } else if (!info?.zona_vivienda) {
-    paso = 'pedir_zona';
-  } else if (!info?.vacante_cedis) {
-    // Intentamos detectar cedis de la zona
-    cedisDetectado = detectarCedis(info.zona_vivienda);
-    if (!cedisDetectado) {
-      // Si no podemos detectar, preguntamos si puede ir a alguna de las dos zonas
-      paso = 'confirmar_zona';
-    } else {
-      paso = 'presentar_vacante';
-    }
-  } else if (!info?.turno_preferido) {
-    paso = 'pedir_turno';
-  } else if (info?.estado_civil === null || info?.estado_civil === undefined) {
-    paso = 'pedir_estado_civil';
-  } else if (info?.dependientes_economicos === null || info?.dependientes_economicos === undefined) {
-    paso = 'pedir_dependientes';
-  } else if (Number(info?.dependientes_economicos) > 0 && (info?.apoyo_cuidado_hijos === null || info?.apoyo_cuidado_hijos === undefined)) {
-    paso = 'pedir_apoyo_cuidado';
-  } else if (!info?.tiempo_traslado_minutos) {
-    paso = 'pedir_traslado';
-  } else if (info?.inconveniente_traslado === null || info?.inconveniente_traslado === undefined) {
-    paso = 'pedir_inconveniente_traslado';
-  } else if (info?.escolaridad_comprobable === null || info?.escolaridad_comprobable === undefined) {
-    paso = 'pedir_escolaridad';
-  } else if (info?.experiencia_almacen_meses === null || info?.experiencia_almacen_meses === undefined) {
-    paso = 'pedir_experiencia';
-  } else if (info?.tiene_constancias_laborales === null || info?.tiene_constancias_laborales === undefined) {
-    paso = 'pedir_constancias';
-  } else if (info?.nivel_salud_percecion === null || info?.nivel_salud_percecion === undefined) {
-    paso = 'pedir_salud';
-  } else if (info?.enfermedades_cronicas === null || info?.enfermedades_cronicas === undefined) {
-    paso = 'pedir_enfermedades';
-  } else if (info?.lesiones_cirugias === null || info?.lesiones_cirugias === undefined) {
-    paso = 'pedir_lesiones';
-  } else if (info?.alergias === null || info?.alergias === undefined) {
-    paso = 'pedir_alergias';
-  } else if (info?.esta_embarazada === null || info?.esta_embarazada === undefined) {
-    paso = 'pedir_embarazo';
-  } else if (info?.problemas_respiratorios === null || info?.problemas_respiratorios === undefined) {
-    paso = 'pedir_respiratorio';
-  } else if (info?.sufre_vertigo === null || info?.sufre_vertigo === undefined) {
-    paso = 'pedir_vertigo';
-  } else if (info?.usa_lentes === null || info?.usa_lentes === undefined) {
-    paso = 'pedir_lentes';
-  } else if (info?.credito_infonavit_fonacot === null || info?.credito_infonavit_fonacot === undefined) {
-    paso = 'pedir_credito';
-  } else if (info?.procesos_legales_antecedentes === null || info?.procesos_legales_antecedentes === undefined) {
-    paso = 'pedir_antecedentes';
-  } else if (info?.documentacion_completa === null || info?.documentacion_completa === undefined) {
-    paso = 'pedir_documentos';
-  } else if (info?.tiene_botas_casquillo === null || info?.tiene_botas_casquillo === undefined) {
-    paso = 'pedir_botas';
-  } else if (info?.referidos_familiares === null || info?.referidos_familiares === undefined) {
-    paso = 'pedir_referidos';
-  } else if (info?.reingreso === null || info?.reingreso === undefined) {
-    paso = 'pedir_reingreso';
-  } else if (!info?.banco) {
-    paso = 'pedir_banco';
-  } else {
-    paso = 'finalizar';
+  // Reconstruimos la conversación previa
+  let historial: { role: string; content: string }[] = [];
+  if (info?.historial) {
+    try { historial = JSON.parse(info.historial); } catch {}
   }
 
-  const cedis = info?.vacante_cedis || cedisDetectado;
+  const systemPrompt = `
+Eres ARIS, reclutadora de Rio Logística. Entrevistas candidatos por WhatsApp para el puesto de Auxiliar de Almacén. Hablas natural, cálida y BREVE (máximo 2 líneas por mensaje).
 
-  const turnosTexto = cedis === 'Editorial'
-    ? 'Matutino (6am-4pm), Vespertino (1pm-10pm) o Nocturno (10pm-7am)'
-    : cedis === 'UPS1'
-    ? 'Solo Matutino (8am-6pm)'
-    : 'Matutino (8am-6pm), Vespertino (11am-10pm) o Nocturno (10pm-6am)';
+CÓMO TRABAJAS:
+- Lees TODA la conversación y sabes qué ya preguntaste y qué te respondieron. NUNCA repitas una pregunta ya contestada.
+- Haces UNA sola pregunta por mensaje.
+- Saludas SOLO en tu primer mensaje.
+- Si el candidato responde varias cosas juntas, las tomas todas y avanzas a lo siguiente.
+- NUNCA digas los nombres internos de los almacenes ("UPS", "UPS 1", "UPS 2", "Penguin", "Editorial"). El candidato no los conoce.
 
-  const vacanteMensaje = cedis === 'Editorial'
-    ? 'Tenemos vacante de Auxiliar de Almacén en Azcapotzalco, CDMX. $220/día + prestaciones de ley. ¿Te interesa?'
-    : 'Tenemos vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli. $250/día + prestaciones de ley. ¿Te interesa?';
+DATOS A RECOLECTAR (uno por uno, en este orden aproximado):
+nombre completo, edad, colonia/zona donde vive, [aquí presentas la vacante], turno, estado civil, dependientes económicos, (si tiene dependientes) apoyo para el cuidado de hijos, tiempo de traslado, inconveniente con horario/traslado, escolaridad (¿comprobable?), experiencia en almacén (cuánto tiempo), constancias laborales, salud del 1 al 10, enfermedades crónicas, lesiones o cirugías recientes, alergias, embarazo (solo si es mujer), enfermedad respiratoria, vértigo o miedo a las alturas, usa lentes, crédito INFONAVIT/FONACOT, antecedentes penales, documentación completa (INE/CURP/NSS/comprobante), botas de casquillo, familiares en Rio Logística, ha trabajado antes aquí (reingreso), banco donde cobra.
 
-  const prompt = `
-Eres ARIS, reclutadora de Rio Logística. Redactas mensajes de WhatsApp naturales y muy breves.
+PRESENTAR VACANTE (cuando ya tengas la zona):
+- Si vive en Azcapotzalco, El Rosario, Vallejo o CDMX zona norte:
+  "Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX. Sueldo $220 al día más prestaciones de ley. ¿Te interesa?"
+  Turnos de esta zona: Matutino 6am-4pm, Vespertino 1pm-10pm, Nocturno 10pm-7am. Calzado: bota O tenis de casquillo.
+- Si vive en Cuautitlán Izcalli, El Sabino o Estado de México zona norte:
+  "Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli. Sueldo $250 al día más prestaciones de ley. ¿Te interesa?"
+  Turnos de esta zona: Matutino 8am-6pm, Vespertino 11am-10pm, Nocturno 10pm-6am. Calzado: bota de casquillo OBLIGATORIA (el tenis NO aplica).
+- Si la zona no es clara: "¿Puedes trasladarte a Azcapotzalco CDMX o a Cuautitlán Izcalli Estado de México?"
 
-NOMBRE DEL CANDIDATO: ${info?.nombre_completo || ''}
-PASO ACTUAL: ${paso}
-MENSAJE DEL CANDIDATO: "${mensajeUsuario}"
+Después de que diga que le interesa, pregunta el turno mostrando SOLO los turnos de su zona. Luego sigue con el resto de las preguntas.
 
-REDACTA el mensaje para este paso. Sin saludos excepto en pedir_nombre. Sin explicaciones. Máximo 2 líneas.
+CALZADO: al preguntar por botas usa la regla de su zona (CDMX: bota o tenis; El Sabino: solo bota).
 
-${paso === 'pedir_nombre' ? 'Saluda como ARIS de Rio Logística y pide el nombre completo.' : ''}
-${paso === 'pedir_edad' ? 'Pide la edad.' : ''}
-${paso === 'pedir_zona' ? 'Pide la colonia o municipio donde vive.' : ''}
-${paso === 'confirmar_zona' ? '¿Puedes trasladarte a Azcapotzalco CDMX o a Cuautitlán Izcalli EdoMex?' : ''}
-${paso === 'presentar_vacante' ? vacanteMensaje : ''}
-${paso === 'pedir_turno' ? `¿Qué turno prefieres? ${turnosTexto}` : ''}
-${paso === 'pedir_estado_civil' ? '¿Cuál es tu estado civil?' : ''}
-${paso === 'pedir_dependientes' ? '¿Tienes hijos u otras personas que dependan de ti económicamente?' : ''}
-${paso === 'pedir_apoyo_cuidado' ? '¿Cuentas con alguien que te apoye con el cuidado de tus hijos mientras trabajas?' : ''}
-${paso === 'pedir_traslado' ? '¿Cuánto tiempo te tardarías en llegar al trabajo?' : ''}
-${paso === 'pedir_inconveniente_traslado' ? '¿Tienes algún inconveniente con el horario o traslado?' : ''}
-${paso === 'pedir_escolaridad' ? '¿Cuál es tu nivel de estudios y es comprobable con documentos?' : ''}
-${paso === 'pedir_experiencia' ? '¿Tienes experiencia en almacén? ¿Cuánto tiempo?' : ''}
-${paso === 'pedir_constancias' ? '¿Cuentas con constancias de trabajos anteriores?' : ''}
-${paso === 'pedir_salud' ? '¿Cómo calificarías tu salud general del 1 al 10?' : ''}
-${paso === 'pedir_enfermedades' ? '¿Padeces alguna enfermedad crónica?' : ''}
-${paso === 'pedir_lesiones' ? '¿Has tenido alguna lesión o cirugía reciente?' : ''}
-${paso === 'pedir_alergias' ? '¿Tienes alguna alergia?' : ''}
-${paso === 'pedir_embarazo' ? '¿Actualmente estás embarazada?' : ''}
-${paso === 'pedir_respiratorio' ? '¿Padeces alguna enfermedad respiratoria o pulmonar?' : ''}
-${paso === 'pedir_vertigo' ? '¿Sufres de vértigo o miedo a las alturas?' : ''}
-${paso === 'pedir_lentes' ? '¿Usas lentes o tienes algún problema de visión?' : ''}
-${paso === 'pedir_credito' ? '¿Tienes algún crédito activo de INFONAVIT o FONACOT?' : ''}
-${paso === 'pedir_antecedentes' ? '¿Tienes algún proceso legal o antecedentes penales?' : ''}
-${paso === 'pedir_documentos' ? '¿Cuentas con documentación original completa? (INE, CURP, NSS, comprobante domicilio)' : ''}
-${paso === 'pedir_botas' ? (cedis === 'UPS' || cedis === 'UPS1' || cedis === 'UPS2' ? '¿Cuentas con botas de casquillo? En este almacén es obligatorio, no aplica tenis.' : '¿Cuentas con botas o tenis de casquillo?') : ''}
-${paso === 'pedir_referidos' ? '¿Tienes familiares o conocidos trabajando en Rio Logística?' : ''}
-${paso === 'pedir_reingreso' ? '¿Has trabajado antes con Rio Logística?' : ''}
-${paso === 'pedir_banco' ? '¿En qué banco tienes tu cuenta?' : ''}
-${paso === 'finalizar' ? `
-Datos: vertigo=${info?.sufre_vertigo}, embarazada=${info?.esta_embarazada}, antecedentes=${info?.procesos_legales_antecedentes}, botas=${info?.tiene_botas_casquillo}, cedis=${cedis}
-Si algún descarte → mensaje amable de que no hay vacante disponible para su perfil.
-Si todo bien → "Listo ${info?.nombre_completo}, registré tu información. El equipo te contactará pronto para los siguientes pasos. ¡Éxito! 🙌"
-` : ''}
+CLASIFICACIÓN (campo "estatus", interno, NO se lo digas al candidato):
+- "Rechazado" si: sufre vértigo, está embarazada, tiene antecedentes penales, o NO tiene el calzado obligatorio de su zona.
+- "Candidato Óptimo" si: terminó todo, tiene entre 19 y 45 años y sin impedimentos.
+- "Pendiente" si: hay algo dudoso, le falta un documento que puede conseguir, o su banco es Santander.
+- "Nuevo" si: todavía está en proceso.
 
-EXTRAE del mensaje del candidato lo que corresponde al paso actual.
+CIERRE (cuando ya tengas TODOS los datos):
+- Si pasó: "Listo [nombre], ya registré toda tu información. El equipo de reclutamiento te contactará pronto para agendar. ¡Mucho éxito! 🙌"
+- Si es Rechazado: "Gracias por tu interés [nombre]. Por ahora no contamos con una vacante que se ajuste a tu perfil, pero te tendremos presente para futuras oportunidades."
 
-RESPONDE SOLO CON ESTE JSON:
+CEDIS (campo interno): "Editorial" para Azcapotzalco, "UPS" para El Sabino, null si aún no se define.
+
+RESPONDE SIEMPRE solo con este JSON, sin texto adicional:
 {
-  "pregunta": "mensaje redactado",
-  "estatus": "Nuevo|Pendiente|Candidato Óptimo|Rechazado",
-  "cedis": "${cedisDetectado || info?.vacante_cedis || 'null'}",
-  "extracccion": {
-    "nombre_completo": null,
-    "edad": null,
-    "zona_vivienda": null,
-    "turno_preferido": null,
-    "estado_civil": null,
-    "dependientes_economicos": null,
-    "apoyo_cuidado_hijos": null,
-    "tiempo_traslado_minutos": null,
-    "inconveniente_traslado": null,
-    "escolaridad_comprobable": null,
-    "experiencia_almacen_meses": null,
-    "areas_desempenadas": null,
-    "tiene_constancias_laborales": null,
-    "nivel_salud_percecion": null,
-    "enfermedades_cronicas": null,
-    "lesiones_cirugias": null,
-    "alergias": null,
-    "esta_embarazada": null,
-    "problemas_respiratorios": null,
-    "sufre_vertigo": null,
-    "usa_lentes": null,
-    "credito_infonavit_fonacot": null,
-    "procesos_legales_antecedentes": null,
-    "documentacion_completa": null,
-    "tiene_botas_casquillo": null,
-    "referidos_familiares": null,
-    "reingreso": null,
-    "banco": null
+  "pregunta": "tu mensaje breve y natural para el candidato",
+  "estatus": "Nuevo | Pendiente | Candidato Óptimo | Rechazado",
+  "cedis": "Editorial | UPS | null",
+  "extraccion": {
+     // SOLO los datos que el candidato dio en su ÚLTIMO mensaje. Lo demás no lo incluyas.
+     // edad y dependientes_economicos como número; preguntas de sí/no como true o false; lo demás texto corto.
   }
 }
+
+Campos válidos para "extraccion": nombre_completo, edad, zona_vivienda, turno_preferido, estado_civil, dependientes_economicos, apoyo_cuidado_hijos, tiempo_traslado_minutos, inconveniente_traslado, escolaridad_comprobable, experiencia_almacen_meses, areas_desempenadas, tiene_constancias_laborales, nivel_salud_percecion, enfermedades_cronicas, lesiones_cirugias, alergias, esta_embarazada, problemas_respiratorios, sufre_vertigo, usa_lentes, credito_infonavit_fonacot, procesos_legales_antecedentes, documentacion_completa, tiene_botas_casquillo, referidos_familiares, reingreso, banco.
 `;
 
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        response_format: { type: 'json_object' }
-      })
-    });
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...historial,
+    { role: 'user', content: mensajeUsuario }
+  ];
 
-    const resData = await response.json();
-    const texto = resData.choices[0].message.content;
-    const parsed = JSON.parse(texto);
+  // Detección de cedis por zona (respaldo, por si la IA no lo pone)
+  const detectarCedis = (txt: string): string | null => {
+    const z = (txt || '').toLowerCase();
+    if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial';
+    if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla/.test(z)) return 'UPS';
+    return null;
+  };
 
-    // Si detectamos cedis por zona, lo forzamos en la respuesta
-    if (cedisDetectado) {
-      parsed.cedis = cedisDetectado;
+  // Reintentamos hasta 3 veces (el free tier a veces falla)
+  for (let intento = 0; intento < 3; intento++) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages,
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        })
+      });
+
+      const resData = await response.json();
+      const texto = resData?.choices?.[0]?.message?.content;
+      if (!texto) throw new Error('Groq sin contenido');
+
+      const parsed = JSON.parse(texto);
+
+      // Forzamos el cedis correcto según la zona conocida
+      if (info?.vacante_cedis) {
+        parsed.cedis = info.vacante_cedis;
+      } else {
+        const detectado = detectarCedis(info?.zona_vivienda || mensajeUsuario);
+        if (detectado) parsed.cedis = detectado;
+      }
+
+      // Guardamos la conversación actualizada para la siguiente vuelta
+      parsed._historial = [
+        ...historial,
+        { role: 'user', content: mensajeUsuario },
+        { role: 'assistant', content: parsed.pregunta }
+      ];
+
+      return JSON.stringify(parsed);
+
+    } catch (e) {
+      console.error(`Groq intento ${intento + 1} falló:`, e);
+      // Si fue el último intento, NO reiniciamos el flujo (eso era lo que rompía todo)
+      if (intento === 2) {
+        return JSON.stringify({
+          pregunta: 'Perdón, tuve un pequeño detalle técnico. ¿Me repites tu último mensaje? 🙏',
+          estatus: 'Nuevo',
+          cedis: info?.vacante_cedis || null,
+          extraccion: {},
+          _historial: [...historial, { role: 'user', content: mensajeUsuario }]
+        });
+      }
     }
-
-    return JSON.stringify(parsed);
-
-  } catch (e) {
-    console.error("Groq error:", e);
-    return JSON.stringify({
-      "pregunta": "Hola, soy ARIS de Rio Logística 👋 ¿Cuál es tu nombre completo?",
-      "estatus": "Nuevo",
-      "cedis": null,
-      "extracccion": {}
-    });
   }
 };
