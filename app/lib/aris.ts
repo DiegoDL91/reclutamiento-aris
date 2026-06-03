@@ -1,24 +1,27 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const arisBrain = async (mensajeUsuario: string) => {
-  // 1. Leemos la llave
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   if (!apiKey) return "Error: No se encontró la llave de acceso.";
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // USAMOS EL MODELO "gemini-pro" QUE ES EL MÁS ESTABLE DEL MUNDO
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const promptSistema = "Eres ARIS, asistente de Rio Logística. Saluda, pide nombre y pregunta por botas de casquillo. Sé muy breve (2 líneas).";
-
-    const result = await model.generateContent(`${promptSistema}\n\nCandidato dice: ${mensajeUsuario}`);
-    const response = await result.response;
-    return response.text();
-
-  } catch (error: any) {
-    // Si falla, que nos diga exactamente qué dice Google
-    return "ARIS temporalmente fuera de línea. Error: " + error.message;
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
+  // LISTA DE MODELOS (Intentaremos uno por uno)
+  const modelosATestear = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+  
+  for (const nombreModelo of modelosATestear) {
+    try {
+      const model = genAI.getGenerativeModel({ model: nombreModelo });
+      const promptSistema = "Eres ARIS, de Rio Logística. Sé breve, pide nombre y pregunta por botas de casquillo.";
+      
+      const result = await model.generateContent(`${promptSistema}\n\nCandidato: ${mensajeUsuario}`);
+      const response = await result.response;
+      return response.text(); // Si llega aquí, es que este modelo SÍ funcionó
+    } catch (e) {
+      console.log(`Modelo ${nombreModelo} falló, intentando el siguiente...`);
+      continue; 
+    }
   }
+
+  return "ARIS está en mantenimiento técnico. Intenta enviar 'Hola' en 1 minuto.";
 };
