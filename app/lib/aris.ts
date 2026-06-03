@@ -2,34 +2,39 @@ export const arisBrain = async (mensajeUsuario: string) => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   if (!apiKey) return "Error: No hay llave de API.";
 
-  // CAMBIO CLAVE: Usamos /v1/ en lugar de /v1beta/
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // LISTA DE MODELOS A BARRER (Incluyendo los que viste en tu pantalla)
+  const modelos = [
+    "gemini-1.5-flash",
+    "gemini-3.5-flash", 
+    "gemini-3.1-flash-lite",
+    "gemini-1.5-pro",
+    "gemini-pro"
+  ];
 
   const payload = {
-    contents: [{
-      parts: [{
-        text: `Eres ARIS, IA de Rio Logística. Entrevistas para Auxiliar de Almacén. Pregunta nombre y si tiene botas de casquillo. Sé breve. \n\n Candidato: ${mensajeUsuario}`
-      }]
-    }]
+    contents: [{ parts: [{ text: `Eres ARIS, de Rio Logística. Responde muy breve (2 líneas): ${mensajeUsuario}` }] }]
   };
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+  // Intentamos uno por uno hasta que uno conteste
+  for (const m of modelos) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    // Si Google nos da un error de "modelo no encontrado", ahora lo veremos claro
-    if (data.error) {
-      return `Google dice: ${data.error.message} (Código: ${data.error.code})`;
+      if (data.candidates && data.candidates[0]) {
+        return data.candidates[0].content.parts[0].text; // ¡ÉXITO!
+      }
+    } catch (e) {
+      continue; // Si este falla, brinca al que sigue
     }
-
-    return data.candidates[0].content.parts[0].text;
-
-  } catch (error: any) {
-    return "Falla de conexión. Intenta de nuevo.";
   }
+
+  return "ARIS sigue sin encontrar su cerebro. Pa, revisa si la API Key está activa en Google AI Studio.";
 };
