@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     const evento = body.event;
     const fromMe = body.data?.key?.fromMe;
 
-    // Solo mensajes entrantes del usuario
     if (evento !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored_event' });
     }
@@ -26,11 +25,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored_no_text' });
     }
 
-    // ARIS piensa
     const rawRespuesta = await arisBrain(texto, tel);
+    
+    // DEBUG - ver qué devuelve Gemini
+    console.log("RAW GEMINI:", rawRespuesta);
+    
     const objetoIA = JSON.parse(rawRespuesta);
+    
+    // DEBUG - ver qué extrajo
+    console.log("OBJETO IA:", JSON.stringify(objetoIA));
+    console.log("EXTRACCION:", JSON.stringify(objetoIA.extracccion));
 
-    // Guardamos en Supabase
     const ex = objetoIA.extracccion;
     const update: any = { telefono_whatsapp: tel, estatus: 'En Proceso' };
     
@@ -38,13 +43,14 @@ export async function POST(req: Request) {
     if (ex?.edad && ex.edad !== "null") update.edad = parseInt(ex.edad);
     if (ex?.botas !== null && ex?.botas !== undefined) update.tiene_botas_casquillo = ex.botas;
 
+    console.log("UPDATE A GUARDAR:", JSON.stringify(update));
+
     const { error: dbError } = await supabase
       .from('candidatos_respuestas')
       .upsert(update, { onConflict: 'telefono_whatsapp' });
     
     if (dbError) console.error("DB Error:", dbError.message, dbError.details);
 
-    // Respondemos por WhatsApp
     await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
       method: 'POST',
       headers: { 
