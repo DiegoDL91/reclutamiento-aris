@@ -36,13 +36,13 @@ export async function POST(req: Request) {
     }
 
     const campos = [
-      'nombre_completo', 'edad', 'zona_vivienda', 'estado_civil',
-      'dependientes_economicos', 'apoyo_cuidado_hijos', 'tiempo_traslado_minutos',
-      'inconveniente_traslado', 'escolaridad_comprobable', 'experiencia_almacen_meses',
-      'areas_desempenadas', 'tiene_constancias_laborales', 'nivel_salud_percecion',
-      'enfermedades_cronicas', 'lesiones_cirugias', 'alergias', 'esta_embarazada',
-      'problemas_respiratorios', 'sufre_vertigo', 'usa_lentes',
-      'credito_infonavit_fonacot', 'procesos_legales_antecedentes',
+      'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
+      'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_hijos',
+      'tiempo_traslado_minutos', 'inconveniente_traslado', 'escolaridad_comprobable',
+      'experiencia_almacen_meses', 'areas_desempenadas', 'tiene_constancias_laborales',
+      'nivel_salud_percecion', 'enfermedades_cronicas', 'lesiones_cirugias',
+      'alergias', 'esta_embarazada', 'problemas_respiratorios', 'sufre_vertigo',
+      'usa_lentes', 'credito_infonavit_fonacot', 'procesos_legales_antecedentes',
       'documentacion_completa', 'tiene_botas_casquillo', 'referidos_familiares',
       'reingreso', 'banco'
     ];
