@@ -3,27 +3,27 @@ import { supabase } from './supabase';
 export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-  // 1. Traemos lo que ya existe en la base de datos
+  // 1. Buscamos qué sabemos del candidato
   const { data: info } = await supabase.from('candidatos_respuestas').select('*').eq('telefono_whatsapp', telefono).maybeSingle();
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const instrucciones = `
-    Eres ARIS, reclutadora pro de Rio Logística. 
-    ESTADO ACTUAL EN BASE DE DATOS: ${JSON.stringify(info || {})}
-
-    TU OBJETIVO: Llenar las columnas (nombre_completo, edad, tiene_botas_casquillo).
+    Eres ARIS, reclutadora de Rio Logística.
+    INFO ACTUAL: ${JSON.stringify(info || {})}
     
-    REGLAS CRÍTICAS:
-    1. Si el usuario dice "Hola", "Buenas tardes", etc, NO es su nombre. El nombre debe ser un nombre de persona.
-    2. Si el usuario da su nombre, extráelo.
-    3. Responde ÚNICAMENTE un objeto JSON puro:
+    TAREA:
+    1. Si en INFO ACTUAL el nombre_completo es null, PÍDELO.
+    2. Si ya tienes el nombre, pide la EDAD.
+    3. Si ya tienes nombre y edad, pide las BOTAS DE CASQUILLO.
+    
+    RESPONDE SIEMPRE EN ESTE FORMATO JSON:
     {
-      "mensaje_para_whatsapp": "Tu respuesta amable y breve",
-      "datos_a_guardar": {
-        "nombre_completo": "Nombre real o null",
-        "edad": "Número o null",
-        "tiene_botas_casquillo": true/false o null
+      "pregunta": "Tu mensaje para WhatsApp",
+      "extracccion": {
+        "nombre": "nombre detectado o null",
+        "edad": "numero o null",
+        "botas": true/false o null
       }
     }
   `;
@@ -33,13 +33,13 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `${instrucciones}\n\nMENSAJE RECIBIDO: "${mensajeUsuario}"` }] }],
+        contents: [{ parts: [{ text: `${instrucciones}\n\nMENSAJE: "${mensajeUsuario}"` }] }],
         generationConfig: { response_mime_type: "application/json" }
       })
     });
     const resData = await response.json();
     return resData.candidates[0].content.parts[0].text;
   } catch (e) {
-    return JSON.stringify({ "mensaje_para_whatsapp": "¡Hola! Soy ARIS de Rio Logística. ¿Con quién tengo el gusto?", "datos_a_guardar": {} });
+    return JSON.stringify({ "pregunta": "Hola, ¿me repites tu nombre?", "extracccion": {} });
   }
 };

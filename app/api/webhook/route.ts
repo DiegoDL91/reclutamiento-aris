@@ -10,26 +10,28 @@ export async function POST(req: Request) {
 
     if (body.data?.key?.fromMe || !texto) return NextResponse.json({ status: 'ignored' });
 
-    // 1. ARIS analiza y nos da el JSON
+    // 1. ARIS analiza
     const rawRespuesta = await arisBrain(texto, tel);
     const objetoIA = JSON.parse(rawRespuesta);
 
-    // 2. Solo actualizamos si la IA detectó datos de verdad
-    const d = objetoIA.datos_a_guardar;
-    const updateData: any = { telefono_whatsapp: tel, estatus: 'En Proceso' };
+    // 2. GUARDADO DINÁMICO (Aquí está la solución)
+    const ex = objetoIA.extracccion;
+    const update: any = { telefono_whatsapp: tel, estatus: 'En Proceso' };
     
-    if (d.nombre_completo) updateData.nombre_completo = d.nombre_completo;
-    if (d.edad) updateData.edad = parseInt(d.edad);
-    if (d.tiene_botas_casquillo !== null) updateData.tiene_botas_casquillo = d.tiene_botas_casquillo;
+    if (ex.nombre && ex.nombre !== "null") update.nombre_completo = ex.nombre;
+    if (ex.edad && ex.edad !== "null") update.edad = parseInt(ex.edad);
+    if (ex.botas !== null) update.tiene_botas_casquillo = ex.botas;
 
-    // 3. GUARDAR EN SUPABASE
-    await supabase.from('candidatos_respuestas').upsert(updateData, { onConflict: 'telefono_whatsapp' });
+    // Guardamos a huevo en la base de datos
+    const { error: dbError } = await supabase.from('candidatos_respuestas').upsert(update, { onConflict: 'telefono_whatsapp' });
+    
+    if (dbError) console.error("Error guardando en DB:", dbError.message);
 
-    // 4. Mandar a WhatsApp
+    // 3. Mandamos el WhatsApp
     await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': process.env.EVOLUTION_API_KEY! },
-      body: JSON.stringify({ "number": tel, "text": objetoIA.mensaje_para_whatsapp })
+      body: JSON.stringify({ "number": tel, "text": objetoIA.pregunta })
     });
 
     return NextResponse.json({ status: 'success' });
