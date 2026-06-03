@@ -10,31 +10,33 @@ export async function POST(req: Request) {
 
     if (body.data?.key?.fromMe || !texto) return NextResponse.json({ status: 'ignored' });
 
-    // 1. ARIS procesa
+    // 1. ARIS analiza el mensaje
     const rawRespuesta = await arisBrain(texto, tel);
     const objetoIA = JSON.parse(rawRespuesta);
 
-    // 2. Guardar datos extraídos (IMPORTANTE: Mapear a las columnas reales)
-    const d = objetoIA.datos;
-    
-    // Solo guardamos si la IA detectó algo nuevo
-    const updates: any = { telefono_whatsapp: tel, estatus: 'En Proceso' };
-    if (d.nombre_completo) updates.nombre_completo = d.nombre_completo;
-    if (d.edad) updates.edad = parseInt(d.edad);
-    if (d.tiene_botas_casquillo !== null) updates.tiene_botas_casquillo = d.tiene_botas_casquillo;
+    // 2. Mapeamos los datos detectados a la base de datos
+    const d = objetoIA.datos_detectados;
+    const updateData: any = { 
+        telefono_whatsapp: tel,
+        estatus: 'En Proceso'
+    };
 
-    await supabase.from('candidatos_respuestas').upsert(updates, { onConflict: 'telefono_whatsapp' });
+    if (d.nombre) updateData.nombre_completo = d.nombre;
+    if (d.edad) updateData.edad = parseInt(d.edad);
+    if (d.botas !== null) updateData.tiene_botas_casquillo = d.botas;
 
-    // 3. Mandar respuesta a WhatsApp
+    // Guardamos en Supabase
+    await supabase.from('candidatos_respuestas').upsert(updateData, { onConflict: 'telefono_whatsapp' });
+
+    // 3. Mandamos la respuesta a WhatsApp
     await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': process.env.EVOLUTION_API_KEY! },
-      body: JSON.stringify({ "number": tel, "text": objetoIA.pregunta })
+      body: JSON.stringify({ "number": tel, "text": objetoIA.respuesta_whatsapp })
     });
 
     return NextResponse.json({ status: 'success' });
   } catch (error: any) {
-    console.error("ERROR:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
