@@ -1,10 +1,13 @@
 import { supabase } from './supabase';
 
 export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
-  // 1. Buscamos qué sabemos del candidato
-  const { data: info } = await supabase.from('candidatos_respuestas').select('*').eq('telefono_whatsapp', telefono).maybeSingle();
+  const { data: info } = await supabase
+    .from('candidatos_respuestas')
+    .select('*')
+    .eq('telefono_whatsapp', telefono)
+    .maybeSingle();
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
