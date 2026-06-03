@@ -31,7 +31,9 @@ export async function POST(req: Request) {
       estatus: objetoIA.estatus || 'Nuevo'
     };
 
-    if (objetoIA.cedis) update.vacante_cedis = objetoIA.cedis;
+    if (objetoIA.cedis && objetoIA.cedis !== 'null') {
+      update.vacante_cedis = objetoIA.cedis;
+    }
 
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'estado_civil',
