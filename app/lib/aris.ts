@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 
 export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
-  const apiKey = process.env.GEMINI_API_KEY;
 
   const { data: info } = await supabase
     .from('candidatos_respuestas')
@@ -9,52 +8,55 @@ export const arisBrain = async (mensajeUsuario: string, telefono: string) => {
     .eq('telefono_whatsapp', telefono)
     .maybeSingle();
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const msg = mensajeUsuario.toLowerCase().trim();
 
-  const instrucciones = `
-Eres ARIS, reclutadora de Rio Logística. Estás entrevistando a un candidato por WhatsApp.
+  // Extracción simple sin IA
+  let nombre = null;
+  let edad = null;
+  let botas = null;
 
-DATOS QUE YA TIENES DEL CANDIDATO:
-${JSON.stringify(info || {})}
-
-MENSAJE QUE ACABA DE ENVIAR EL CANDIDATO:
-"${mensajeUsuario}"
-
-INSTRUCCIONES:
-- Lee el MENSAJE del candidato y extrae cualquier información que mencione.
-- Si el candidato dice su nombre (ejemplo: "Me llamo Diego", "Soy Ana", "Diego"), extrae ese nombre.
-- Si el candidato dice su edad (ejemplo: "tengo 25 años", "25"), extrae esa edad.
-- Si el candidato menciona botas de casquillo (ejemplo: "sí tengo", "no tengo"), extrae eso.
-
-FLUJO DE CONVERSACIÓN:
-1. Si nombre_completo es null, pide el nombre.
-2. Si ya tienes nombre pero edad es null, pide la edad.
-3. Si ya tienes nombre y edad pero no sabes de botas, pregunta si tiene botas de casquillo.
-4. Si tienes todo, agradece y di que el equipo lo contactará.
-
-RESPONDE ÚNICAMENTE EN ESTE FORMATO JSON SIN TEXTO EXTRA:
-{
-  "pregunta": "Tu siguiente mensaje para el candidato",
-  "extracccion": {
-    "nombre": "nombre completo detectado en el mensaje o null",
-    "edad": "numero detectado en el mensaje o null",
-    "botas": true o false o null
+  // Detectar nombre
+  if (!info?.nombre_completo) {
+    // Cualquier mensaje que no sea solo "hola" lo tomamos como nombre
+    if (msg !== 'hola' && msg !== 'hi' && msg !== 'buenas' && msg.length > 2) {
+      nombre = mensajeUsuario.trim();
+    }
   }
-}
-`;
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: instrucciones }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
-    });
-    const resData = await response.json();
-    return resData.candidates[0].content.parts[0].text;
-  } catch (e) {
-    return JSON.stringify({ "pregunta": "Hola, ¿me repites tu nombre?", "extracccion": {} });
+  // Detectar edad
+  if (info?.nombre_completo && !info?.edad) {
+    const num = parseInt(msg);
+    if (!isNaN(num) && num > 10 && num < 80) {
+      edad = num.toString();
+    }
   }
+
+  // Detectar botas
+  if (info?.nombre_completo && info?.edad) {
+    if (msg.includes('si') || msg.includes('sí') || msg.includes('tengo')) {
+      botas = true;
+    } else if (msg.includes('no')) {
+      botas = false;
+    }
+  }
+
+  // Decidir pregunta
+  let pregunta = '';
+  const nombreFinal = nombre || info?.nombre_completo;
+  const edadFinal = edad || info?.edad;
+
+  if (!nombreFinal) {
+    pregunta = '¡Hola! Soy ARIS de Rio Logística. ¿Cuál es tu nombre completo?';
+  } else if (!edadFinal) {
+    pregunta = `Mucho gusto ${nombreFinal}. ¿Cuántos años tienes?`;
+  } else if (botas === null && !info?.tiene_botas_casquillo) {
+    pregunta = '¿Cuentas con botas de casquillo?';
+  } else {
+    pregunta = '¡Perfecto! Hemos registrado tu información. El equipo de Rio Logística te contactará pronto. 🎉';
+  }
+
+  return JSON.stringify({
+    pregunta,
+    extracccion: { nombre, edad, botas }
+  });
 };
