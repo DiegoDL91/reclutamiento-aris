@@ -1,27 +1,35 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 export const arisBrain = async (mensajeUsuario: string) => {
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) return "Error: No se encontró la llave de acceso.";
+  if (!apiKey) return "Error: No hay llave de API en Vercel.";
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  
-  // LISTA DE MODELOS (Intentaremos uno por uno)
-  const modelosATestear = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
-  
-  for (const nombreModelo of modelosATestear) {
-    try {
-      const model = genAI.getGenerativeModel({ model: nombreModelo });
-      const promptSistema = "Eres ARIS, de Rio Logística. Sé breve, pide nombre y pregunta por botas de casquillo.";
-      
-      const result = await model.generateContent(`${promptSistema}\n\nCandidato: ${mensajeUsuario}`);
-      const response = await result.response;
-      return response.text(); // Si llega aquí, es que este modelo SÍ funcionó
-    } catch (e) {
-      console.log(`Modelo ${nombreModelo} falló, intentando el siguiente...`);
-      continue; 
+  // LE PEGAMOS DIRECTO A LA PUERTA DE GOOGLE
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const payload = {
+    contents: [{
+      parts: [{
+        text: `Eres ARIS, IA de Rio Logística. Entrevistas para Auxiliar de Almacén. Pregunta nombre y si tiene botas de casquillo. Sé muy breve. \n\n Candidato: ${mensajeUsuario}`
+      }]
+    }]
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    // Si Google nos da error, lo pintamos directo
+    if (data.error) {
+      return `Google dice: ${data.error.message}`;
     }
-  }
 
-  return "ARIS está en mantenimiento técnico. Intenta enviar 'Hola' en 1 minuto.";
+    return data.candidates[0].content.parts[0].text;
+
+  } catch (error: any) {
+    return "Falla de red. Intenta de nuevo.";
+  }
 };
