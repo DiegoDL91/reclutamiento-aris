@@ -6,6 +6,10 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    // DEBUG TEMPORAL - bórralo después
+    console.log("EVENTO:", body.event);
+    console.log("BODY COMPLETO:", JSON.stringify(body).slice(0, 500));
+
     if (body.event !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored_event' });
     }
