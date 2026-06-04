@@ -116,7 +116,7 @@ Campos válidos para "extraccion": ${CAMPOS.join(', ')}.
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'llama-3.1-8b-instant',
           messages,
           temperature: 0.2,
           response_format: { type: 'json_object' }
