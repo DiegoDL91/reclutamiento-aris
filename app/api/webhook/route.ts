@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabase';
 import { arisBrain } from '../../lib/aris';
 
+async function enviarWhatsApp(tel: string, texto: string) {
+  await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': process.env.EVOLUTION_API_KEY!
+    },
+    body: JSON.stringify({ number: tel, text: texto })
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -39,7 +50,7 @@ export async function POST(req: Request) {
       .upsert(critico, { onConflict: 'telefono_whatsapp' });
     if (e1) console.error('Error guardando memoria:', e1.message);
 
-    // === GUARDADO 2: los datos extraídos. Si una columna no existe, solo falla esto. ===
+    // === GUARDADO 2: los datos extraídos ===
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
       'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_hijos',
@@ -65,18 +76,10 @@ export async function POST(req: Request) {
       const { error: e2 } = await supabase
         .from('candidatos_respuestas')
         .upsert(datos, { onConflict: 'telefono_whatsapp' });
-      if (e2) console.error('Error guardando datos (revisa nombres de columnas):', e2.message);
+      if (e2) console.error('Error guardando datos:', e2.message);
     }
 
-    // === Respondemos por WhatsApp ===
-    await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/ARIS`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': process.env.EVOLUTION_API_KEY!
-      },
-      body: JSON.stringify({ number: tel, text: objetoIA.pregunta })
-    });
+    await enviarWhatsApp(tel, objetoIA.pregunta);
 
     return NextResponse.json({ status: 'success' });
 
