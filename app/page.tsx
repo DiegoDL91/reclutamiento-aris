@@ -30,49 +30,56 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
     { data: todos },
     { data: ultimos },
     { data: recientes7 },
+    { data: todoAnio },
   ] = await Promise.all([
     supabase.from('vacantes').select('*').order('cedis'),
     supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }),
     supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }).gte('fecha_registro', desde).lte('fecha_registro', hasta),
     supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }).gte('fecha_registro', desdeAnt).lte('fecha_registro', hastaAnt),
-    supabase.from('candidatos_respuestas').select('historial, telefono_whatsapp, nombre_completo'),
+    supabase.from('candidatos_respuestas').select('historial, telefono_whatsapp, nombre_completo, fecha_registro'),
     supabase.from('candidatos_respuestas').select('*').order('fecha_registro', { ascending: false }).limit(5),
     supabase.from('candidatos_respuestas').select('fecha_registro').gte('fecha_registro', hace7),
+    supabase.from('candidatos_respuestas').select('fecha_registro').gte('fecha_registro', `${year}-01-01`),
   ])
 
   const parseMsgs = (h: any) => { try { return JSON.parse(h || '[]').length } catch { return 0 } }
   const totalMensajes = todos?.reduce((a, c) => a + parseMsgs(c.historial), 0) || 0
-  const promedio = totalContactos ? Math.round(totalMensajes / totalContactos) : 0
+
+  const mensajesMes = (todos || []).filter(c => c.fecha_registro >= desde && c.fecha_registro <= hasta).reduce((a, c) => a + parseMsgs(c.historial), 0)
+  const mensajesAnt = (todos || []).filter(c => c.fecha_registro >= desdeAnt && c.fecha_registro <= hastaAnt).reduce((a, c) => a + parseMsgs(c.historial), 0)
+
+  const promedio = (contactosMes || 0) > 0 ? Math.round(mensajesMes / (contactosMes || 1)) : 0
+  const promedioAnt = (contactosAnt || 0) > 0 ? Math.round(mensajesAnt / (contactosAnt || 1)) : 0
 
   const topCandidatos = (todos || [])
     .map(c => ({ nombre: c.nombre_completo || c.telefono_whatsapp, msgs: parseMsgs(c.historial) }))
     .sort((a, b) => b.msgs - a.msgs).slice(0, 5)
 
-  // % comparación vs mes anterior
   const pct = (curr: number, prev: number) => {
     if (prev === 0 && curr === 0) return { label: '— sin datos previos', up: true }
     if (prev === 0) return { label: '↑ +100% vs mes anterior', up: true }
     const d = Math.round(((curr - prev) / prev) * 100)
     return { label: `${d >= 0 ? '↑' : '↓'} ${Math.abs(d)}% vs mes anterior`, up: d >= 0 }
   }
-  const cmp = pct(contactosMes || 0, contactosAnt || 0)
 
-  // Chart: últimos 7 días
+  // Gráfica 7 días
   const diasMap: Record<string, number> = {}
   const diasLabels: string[] = []
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i)
     const key = d.toISOString().split('T')[0]
-    const label = d.toLocaleDateString('es-MX', { weekday: 'short' })
     diasMap[key] = 0
-    diasLabels.push(label)
+    diasLabels.push(d.toLocaleDateString('es-MX', { weekday: 'short' }))
   }
-  recientes7?.forEach(c => {
-    const key = c.fecha_registro?.split('T')[0]
-    if (key && key in diasMap) diasMap[key]++
-  })
+  recientes7?.forEach(c => { const k = c.fecha_registro?.split('T')[0]; if (k && k in diasMap) diasMap[k]++ })
   const chartBars = Object.values(diasMap)
   const maxBar = Math.max(...chartBars, 1)
+
+  // Gráfica anual
+  const porMes = Array(12).fill(0)
+  todoAnio?.forEach(c => { const m = new Date(c.fecha_registro).getMonth(); porMes[m]++ })
+  const mesesHastaHoy = porMes.slice(0, now.getMonth() + 1)
+  const maxAnio = Math.max(...mesesHastaHoy, 1)
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 bg-white pb-20">
@@ -80,7 +87,10 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
       <div className="flex justify-between items-end">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Estadísticas de ARIS</h1>
-          <MonthSelector seleccionado={mes} />
+          <div className="flex items-center gap-3">
+            <MonthSelector seleccionado={mes}/>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rio Logística 2026</p>
+          </div>
         </div>
         <Link href="/perfiles" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 transition-all">
           <Plus size={18}/> Nueva Vacante
@@ -88,10 +98,10 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <StatCard title="Total Contactos" value={totalContactos || 0} icon={<Users size={20}/>} color="border-blue-500" iconColor="text-blue-600" compare={cmp}/>
-        <StatCard title="Total Mensajes" value={totalMensajes} icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600"/>
-        <StatCard title="Promedio por Contacto" value={promedio} icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600"/>
-        <StatCard title="Contactos este mes" value={contactosMes || 0} icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" compare={cmp}/>
+        <StatCard title="Total Contactos" value={totalContactos || 0} icon={<Users size={20}/>} color="border-blue-500" iconColor="text-blue-600" compare={pct(contactosMes||0, contactosAnt||0)}/>
+        <StatCard title="Mensajes este mes" value={mensajesMes} icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600" compare={pct(mensajesMes, mensajesAnt)}/>
+        <StatCard title="Promedio por Contacto" value={promedio} icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600" compare={pct(promedio, promedioAnt)}/>
+        <StatCard title="Contactos este mes" value={contactosMes || 0} icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" compare={pct(contactosMes||0, contactosAnt||0)}/>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -100,30 +110,22 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
             {chartBars.map((v, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-[8px] text-slate-400">{v > 0 ? v : ''}</span>
-                <div
-                  className={`w-full rounded-t-xl transition-all ${v > 0 ? 'bg-blue-600' : 'bg-blue-100'}`}
-                  style={{height: `${Math.max((v / maxBar) * 100, 4)}%`}}
-                />
+                <div className={`w-full rounded-t-xl ${v > 0 ? 'bg-blue-600' : 'bg-blue-100'}`} style={{height: `${Math.max((v/maxBar)*100, 4)}%`}}/>
                 <span className="text-[8px] text-slate-400 capitalize">{diasLabels[i]}</span>
               </div>
             ))}
           </div>
         </Box>
-        <Box title="Tráfico por Día" sub={`${MESES[mesAntIndex]} vs ${mes}`}>
-          <div className="h-56 flex items-end justify-center gap-16 pb-4">
-            {[
-              { label: MESES[mesAntIndex], val: contactosAnt || 0, color: 'bg-emerald-300' },
-              { label: mes, val: contactosMes || 0, color: 'bg-emerald-600' },
-            ].map(({ label, val, color }) => {
-              const maxV = Math.max(contactosAnt || 0, contactosMes || 0, 1)
-              return (
-                <div key={label} className="flex flex-col items-center gap-2">
-                  <span className="text-xs font-black text-slate-600">{val}</span>
-                  <div className={`w-16 ${color} rounded-2xl`} style={{height: `${Math.max((val / maxV) * 160, 10)}px`}}/>
-                  <span className="text-[10px] text-slate-400 capitalize">{label}</span>
-                </div>
-              )
-            })}
+
+        <Box title="Candidatos por Mes" sub={`Actividad mensual — ${year}`}>
+          <div className="h-56 flex items-end justify-between px-2 border-b border-slate-100 gap-1 pb-1">
+            {mesesHastaHoy.map((v, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <span className="text-[8px] text-slate-400">{v > 0 ? v : ''}</span>
+                <div className={`w-full rounded-t-xl ${i === mesIndex ? 'bg-emerald-600' : 'bg-emerald-200'}`} style={{height: `${Math.max((v/maxAnio)*100, 4)}%`}}/>
+                <span className="text-[8px] text-slate-400 capitalize">{MESES[i].slice(0,3)}</span>
+              </div>
+            ))}
           </div>
         </Box>
       </div>
@@ -163,11 +165,11 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
             {!topCandidatos.length && <p className="text-slate-300 text-sm italic text-center py-8">Sin datos aún</p>}
             {topCandidatos.map((c, i) => (
               <div key={i} className="flex items-center gap-3">
-                <span className="text-[10px] font-black text-slate-400 w-4">{i + 1}</span>
+                <span className="text-[10px] font-black text-slate-400 w-4">{i+1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-700 truncate">{c.nombre}</p>
                   <div className="h-1.5 bg-blue-50 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100, (c.msgs / (topCandidatos[0]?.msgs || 1)) * 100)}%`}}/>
+                    <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100,(c.msgs/(topCandidatos[0]?.msgs||1))*100)}%`}}/>
                   </div>
                 </div>
                 <span className="text-xs font-black text-blue-600">{c.msgs}</span>
@@ -194,9 +196,7 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
               </div>
               <h3 className="text-xl font-black text-slate-800 mt-1 mb-1">{v.cedis}</h3>
               <p className="text-[10px] text-slate-400 mb-3 flex items-center gap-1"><MapPin size={10}/> {v.ubicacion}</p>
-              <p className="text-xs text-slate-400 italic leading-relaxed border-t border-slate-50 pt-3">
-                Filtros de botas y documentación activos.
-              </p>
+              <p className="text-xs text-slate-400 italic leading-relaxed border-t border-slate-50 pt-3">Filtros de botas y documentación activos.</p>
             </div>
           ))}
         </div>
@@ -214,11 +214,7 @@ function StatCard({ title, value, icon, color, iconColor, compare }: any) {
       </div>
       <div>
         <h3 className="text-4xl font-black text-slate-800">{value}</h3>
-        {compare && (
-          <p className={`text-[10px] font-bold mt-2 italic tracking-tighter ${compare.up ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {compare.label}
-          </p>
-        )}
+        {compare && <p className={`text-[10px] font-bold mt-2 italic tracking-tighter ${compare.up ? 'text-emerald-500' : 'text-rose-500'}`}>{compare.label}</p>}
       </div>
     </div>
   )

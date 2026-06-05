@@ -22,7 +22,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             <NavItem href="/perfiles" icon={<Briefcase size={20}/>} label="Perfiles" active={pathname === '/perfiles'} />
           </nav>
           <div className="p-4 border-t border-slate-50 text-[10px] text-slate-400 font-bold text-center leading-tight">
-            Rio Logística® 2026<br/>
+          ®Rio Logística 2026<br/>
             <span className="font-medium">Todos los derechos reservados</span>
           </div>
         </div>
