@@ -1,56 +1,79 @@
-import { supabase } from './lib/supabase' 
+import { supabase } from './lib/supabase'
 import { Users, MessageCircle, TrendingUp, BarChart3, Plus, MapPin } from 'lucide-react'
+import Link from 'next/link'
+import MonthSelector from './components/MonthSelector'
 
-export default async function Home() {
-  // 1. Traemos las vacantes (UPS 1, UPS 2, Penguin)
-  const { data: vacantes } = await supabase.from('vacantes').select('*').order('cedis', { ascending: true })
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-  // 2. Traemos el conteo real de prospectos
-  const { count: totalContactos } = await supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true })
+export default async function Home({ searchParams }: { searchParams: { mes?: string } }) {
+  const now = new Date()
+  const mesActual = MESES[now.getMonth()]
+  const mes = searchParams?.mes || mesActual
+  const mesIndex = MESES.indexOf(mes)
+  const year = now.getFullYear()
+  const desde = new Date(year, mesIndex, 1).toISOString()
+  const hasta = new Date(year, mesIndex + 1, 0, 23, 59, 59).toISOString()
 
-  // 3. Traemos los últimos 2 mensajes reales (si es que hay)
-  const { data: ultimosCandidatos } = await supabase.from('candidatos_respuestas').select('*').order('fecha_registro', { ascending: false }).limit(2)
+  const [
+    { data: vacantes },
+    { count: totalContactos },
+    { count: contactosMes },
+    { data: todos },
+    { data: ultimos },
+  ] = await Promise.all([
+    supabase.from('vacantes').select('*').order('cedis'),
+    supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }),
+    supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true })
+      .gte('fecha_registro', desde).lte('fecha_registro', hasta),
+    supabase.from('candidatos_respuestas').select('historial, telefono_whatsapp, nombre_completo'),
+    supabase.from('candidatos_respuestas').select('*').order('fecha_registro', { ascending: false }).limit(5),
+  ])
+
+  const parseMsgs = (h: any) => { try { return JSON.parse(h || '[]').length } catch { return 0 } }
+  const totalMensajes = todos?.reduce((a, c) => a + parseMsgs(c.historial), 0) || 0
+  const promedio = totalContactos ? Math.round(totalMensajes / totalContactos) : 0
+
+  const topCandidatos = (todos || [])
+    .map(c => ({ nombre: c.nombre_completo || c.telefono_whatsapp, msgs: parseMsgs(c.historial) }))
+    .sort((a, b) => b.msgs - a.msgs)
+    .slice(0, 5)
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 bg-white pb-20">
-      
-      {/* HEADER DE ESTADÍSTICAS */}
+
       <div className="flex justify-between items-end">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Estadísticas de ARIS</h1>
-          <p className="text-sm text-slate-400 font-medium">marzo 2026 | Centro de Mando Rio Logística</p>
+          <MonthSelector seleccionado={mes} />
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 transition-all">
+        <Link href="/perfiles" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 transition-all">
           <Plus size={18} /> Nueva Vacante
-        </button>
+        </Link>
       </div>
 
-      {/* 4 TARJETAS PRINCIPALES (Conectadas a la base) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         <StatCard title="Total Contactos" value={totalContactos || 0} icon={<Users size={20}/>} color="border-blue-500" iconColor="text-blue-600" />
-        <StatCard title="Total Mensajes" value="0" icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600" />
-        <StatCard title="Promedio Canal" value="0" icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600" />
-        <StatCard title="Recibidos" value="0" icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" />
+        <StatCard title="Total Mensajes" value={totalMensajes} icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600" />
+        <StatCard title="Promedio por Contacto" value={promedio} icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600" />
+        <StatCard title="Contactos este mes" value={contactosMes || 0} icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" />
       </div>
 
-      {/* GRÁFICAS DE ACTIVIDAD */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <Box title="Actividad de Usuarios" sub="Flujo de ARIS vs Registros">
           <div className="h-56 flex items-end justify-between px-4 border-b border-slate-100 gap-2 pb-1">
-             {[30, 60, 40, 95, 55, 70, 85].map((h, i) => (
-               <div key={i} className={`w-full ${i === 3 ? 'bg-blue-600' : 'bg-blue-100'} rounded-t-xl transition-all`} style={{height: `${h}%`}}></div>
-             ))}
+            {[30, 60, 40, 95, 55, 70, 85].map((h, i) => (
+              <div key={i} className={`w-full ${i === 3 ? 'bg-blue-600' : 'bg-blue-100'} rounded-t-xl`} style={{height: `${h}%`}} />
+            ))}
           </div>
         </Box>
         <Box title="Tráfico por Día" sub="Visitantes únicos diarios">
           <div className="h-56 flex items-end justify-center gap-16 pb-4">
-            <div className="w-16 bg-emerald-400 rounded-2xl shadow-lg shadow-emerald-50" style={{height: '55%'}}></div>
-            <div className="w-16 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-200" style={{height: '95%'}}></div>
+            <div className="w-16 bg-emerald-400 rounded-2xl" style={{height: '55%'}} />
+            <div className="w-16 bg-emerald-600 rounded-2xl" style={{height: '95%'}} />
           </div>
         </Box>
       </div>
 
-      {/* SECCIÓN DE MENSAJES (DINÁMICA) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2">
           <Box title="Mensajes Recibidos" sub="Últimas interacciones procesadas por ARIS">
@@ -65,15 +88,15 @@ export default async function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 text-slate-600">
-                  {ultimosCandidatos?.length === 0 && (
+                  {!ultimos?.length && (
                     <tr><td colSpan={4} className="p-10 text-center italic text-slate-300">Esperando candidatos en WhatsApp...</td></tr>
                   )}
-                  {ultimosCandidatos?.map((c: any) => (
+                  {ultimos?.map((c: any) => (
                     <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4 font-bold text-slate-800">{c.nombre_completo || 'Candidato Nuevo'}</td>
                       <td className="p-4 text-xs text-center italic">{c.estatus}</td>
-                      <td className="p-4 text-[10px] font-bold">{new Date(c.fecha_registro).toLocaleDateString()}</td>
-                      <td className="p-4"><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black">{c.calificacion_ia || 0}</span></td>
+                      <td className="p-4 text-[10px] font-bold">{new Date(c.fecha_registro).toLocaleDateString('es-MX')}</td>
+                      <td className="p-4"><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black">{c.calificacion_ia || '—'}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -81,20 +104,29 @@ export default async function Home() {
             </div>
           </Box>
         </div>
+
         <Box title="Mensajes por Contacto" sub="Ranking de interacción">
-          <div className="h-full flex flex-col justify-center space-y-8 py-10">
-            <div className="w-full bg-blue-900 h-12 rounded-2xl shadow-lg flex items-center px-4 justify-between">
-               <span className="text-[10px] text-white font-bold tracking-tighter italic">MONITOR ACTIVO</span>
-               <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></div>
-            </div>
+          <div className="mt-4 space-y-4">
+            {!topCandidatos.length && <p className="text-slate-300 text-sm italic text-center py-8">Sin datos aún</p>}
+            {topCandidatos.map((c, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-[10px] font-black text-slate-400 w-4">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700 truncate">{c.nombre}</p>
+                  <div className="h-1.5 bg-blue-50 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100, (c.msgs / (topCandidatos[0]?.msgs || 1)) * 100)}%`}} />
+                  </div>
+                </div>
+                <span className="text-xs font-black text-blue-600">{c.msgs}</span>
+              </div>
+            ))}
           </div>
         </Box>
       </div>
 
-      {/* MONITOR DE CEDIS (DINÁMICO) */}
       <section className="space-y-6">
         <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
-          <span className="w-2 h-8 bg-blue-600 rounded-full"></span> Monitor de CEDIS Activos
+          <span className="w-2 h-8 bg-blue-600 rounded-full" /> Monitor de CEDIS Activos
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {vacantes?.map((v: any) => (
@@ -102,21 +134,20 @@ export default async function Home() {
               <div className="flex justify-between items-start mb-2">
                 <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em]">{v.giro}</span>
                 <div className="flex gap-1">
-                   {v.turnos?.map((t: string) => (
-                     <span key={t} className="text-[7px] bg-slate-100 px-1 rounded uppercase font-bold">{t[0]}</span>
-                   ))}
+                  {v.turnos?.map((t: string) => (
+                    <span key={t} className="text-[7px] bg-slate-100 px-1 rounded uppercase font-bold">{t[0]}</span>
+                  ))}
                 </div>
               </div>
               <h3 className="text-xl font-black text-slate-800 mt-1 mb-1">{v.cedis}</h3>
               <p className="text-[10px] text-slate-400 mb-3 flex items-center gap-1"><MapPin size={10}/> {v.ubicacion}</p>
               <p className="text-xs text-slate-400 italic leading-relaxed border-t border-slate-50 pt-3">
-                "Filtros de botas y documentación activos."
+                Filtros de botas y documentación activos.
               </p>
             </div>
           ))}
         </div>
       </section>
-
     </div>
   )
 }
@@ -128,10 +159,7 @@ function StatCard({ title, value, icon, color, iconColor }: any) {
         <p className="text-[10px] font-black uppercase tracking-[0.2em] w-24 leading-relaxed">{title}</p>
         <div className={`p-4 bg-slate-50 rounded-2xl ${iconColor}`}>{icon}</div>
       </div>
-      <div>
-        <h3 className="text-4xl font-black text-slate-800">{value}</h3>
-        <p className="text-[10px] font-bold text-rose-500 mt-2 italic tracking-tighter">↘ -50.0% vs mes anterior</p>
-      </div>
+      <h3 className="text-4xl font-black text-slate-800">{value}</h3>
     </div>
   )
 }
