@@ -3,6 +3,8 @@ import { Users, MessageCircle, TrendingUp, BarChart3, Plus, MapPin } from 'lucid
 import Link from 'next/link'
 import MonthSelector from './components/MonthSelector'
 
+export const dynamic = 'force-dynamic'
+
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 export default async function Home({ searchParams }: { searchParams: { mes?: string } }) {
@@ -11,22 +13,31 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
   const mes = searchParams?.mes || mesActual
   const mesIndex = MESES.indexOf(mes)
   const year = now.getFullYear()
+
   const desde = new Date(year, mesIndex, 1).toISOString()
   const hasta = new Date(year, mesIndex + 1, 0, 23, 59, 59).toISOString()
+  const mesAntIndex = mesIndex === 0 ? 11 : mesIndex - 1
+  const mesAntYear = mesIndex === 0 ? year - 1 : year
+  const desdeAnt = new Date(mesAntYear, mesAntIndex, 1).toISOString()
+  const hastaAnt = new Date(mesAntYear, mesAntIndex + 1, 0, 23, 59, 59).toISOString()
+  const hace7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [
     { data: vacantes },
     { count: totalContactos },
     { count: contactosMes },
+    { count: contactosAnt },
     { data: todos },
     { data: ultimos },
+    { data: recientes7 },
   ] = await Promise.all([
     supabase.from('vacantes').select('*').order('cedis'),
     supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }),
-    supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true })
-      .gte('fecha_registro', desde).lte('fecha_registro', hasta),
+    supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }).gte('fecha_registro', desde).lte('fecha_registro', hasta),
+    supabase.from('candidatos_respuestas').select('*', { count: 'exact', head: true }).gte('fecha_registro', desdeAnt).lte('fecha_registro', hastaAnt),
     supabase.from('candidatos_respuestas').select('historial, telefono_whatsapp, nombre_completo'),
     supabase.from('candidatos_respuestas').select('*').order('fecha_registro', { ascending: false }).limit(5),
+    supabase.from('candidatos_respuestas').select('fecha_registro').gte('fecha_registro', hace7),
   ])
 
   const parseMsgs = (h: any) => { try { return JSON.parse(h || '[]').length } catch { return 0 } }
@@ -35,8 +46,33 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
 
   const topCandidatos = (todos || [])
     .map(c => ({ nombre: c.nombre_completo || c.telefono_whatsapp, msgs: parseMsgs(c.historial) }))
-    .sort((a, b) => b.msgs - a.msgs)
-    .slice(0, 5)
+    .sort((a, b) => b.msgs - a.msgs).slice(0, 5)
+
+  // % comparación vs mes anterior
+  const pct = (curr: number, prev: number) => {
+    if (prev === 0 && curr === 0) return { label: '— sin datos previos', up: true }
+    if (prev === 0) return { label: '↑ +100% vs mes anterior', up: true }
+    const d = Math.round(((curr - prev) / prev) * 100)
+    return { label: `${d >= 0 ? '↑' : '↓'} ${Math.abs(d)}% vs mes anterior`, up: d >= 0 }
+  }
+  const cmp = pct(contactosMes || 0, contactosAnt || 0)
+
+  // Chart: últimos 7 días
+  const diasMap: Record<string, number> = {}
+  const diasLabels: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    const key = d.toISOString().split('T')[0]
+    const label = d.toLocaleDateString('es-MX', { weekday: 'short' })
+    diasMap[key] = 0
+    diasLabels.push(label)
+  }
+  recientes7?.forEach(c => {
+    const key = c.fecha_registro?.split('T')[0]
+    if (key && key in diasMap) diasMap[key]++
+  })
+  const chartBars = Object.values(diasMap)
+  const maxBar = Math.max(...chartBars, 1)
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 bg-white pb-20">
@@ -47,29 +83,47 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
           <MonthSelector seleccionado={mes} />
         </div>
         <Link href="/perfiles" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-blue-100 transition-all">
-          <Plus size={18} /> Nueva Vacante
+          <Plus size={18}/> Nueva Vacante
         </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <StatCard title="Total Contactos" value={totalContactos || 0} icon={<Users size={20}/>} color="border-blue-500" iconColor="text-blue-600" />
-        <StatCard title="Total Mensajes" value={totalMensajes} icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600" />
-        <StatCard title="Promedio por Contacto" value={promedio} icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600" />
-        <StatCard title="Contactos este mes" value={contactosMes || 0} icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" />
+        <StatCard title="Total Contactos" value={totalContactos || 0} icon={<Users size={20}/>} color="border-blue-500" iconColor="text-blue-600" compare={cmp}/>
+        <StatCard title="Total Mensajes" value={totalMensajes} icon={<MessageCircle size={20}/>} color="border-purple-500" iconColor="text-purple-600"/>
+        <StatCard title="Promedio por Contacto" value={promedio} icon={<TrendingUp size={20}/>} color="border-emerald-500" iconColor="text-emerald-600"/>
+        <StatCard title="Contactos este mes" value={contactosMes || 0} icon={<BarChart3 size={20}/>} color="border-orange-500" iconColor="text-orange-600" compare={cmp}/>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <Box title="Actividad de Usuarios" sub="Flujo de ARIS vs Registros">
-          <div className="h-56 flex items-end justify-between px-4 border-b border-slate-100 gap-2 pb-1">
-            {[30, 60, 40, 95, 55, 70, 85].map((h, i) => (
-              <div key={i} className={`w-full ${i === 3 ? 'bg-blue-600' : 'bg-blue-100'} rounded-t-xl`} style={{height: `${h}%`}} />
+        <Box title="Actividad de Usuarios" sub="Candidatos registrados — últimos 7 días">
+          <div className="h-56 flex items-end justify-between px-2 border-b border-slate-100 gap-1 pb-1">
+            {chartBars.map((v, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <span className="text-[8px] text-slate-400">{v > 0 ? v : ''}</span>
+                <div
+                  className={`w-full rounded-t-xl transition-all ${v > 0 ? 'bg-blue-600' : 'bg-blue-100'}`}
+                  style={{height: `${Math.max((v / maxBar) * 100, 4)}%`}}
+                />
+                <span className="text-[8px] text-slate-400 capitalize">{diasLabels[i]}</span>
+              </div>
             ))}
           </div>
         </Box>
-        <Box title="Tráfico por Día" sub="Visitantes únicos diarios">
+        <Box title="Tráfico por Día" sub={`${MESES[mesAntIndex]} vs ${mes}`}>
           <div className="h-56 flex items-end justify-center gap-16 pb-4">
-            <div className="w-16 bg-emerald-400 rounded-2xl" style={{height: '55%'}} />
-            <div className="w-16 bg-emerald-600 rounded-2xl" style={{height: '95%'}} />
+            {[
+              { label: MESES[mesAntIndex], val: contactosAnt || 0, color: 'bg-emerald-300' },
+              { label: mes, val: contactosMes || 0, color: 'bg-emerald-600' },
+            ].map(({ label, val, color }) => {
+              const maxV = Math.max(contactosAnt || 0, contactosMes || 0, 1)
+              return (
+                <div key={label} className="flex flex-col items-center gap-2">
+                  <span className="text-xs font-black text-slate-600">{val}</span>
+                  <div className={`w-16 ${color} rounded-2xl`} style={{height: `${Math.max((val / maxV) * 160, 10)}px`}}/>
+                  <span className="text-[10px] text-slate-400 capitalize">{label}</span>
+                </div>
+              )
+            })}
           </div>
         </Box>
       </div>
@@ -104,7 +158,6 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
             </div>
           </Box>
         </div>
-
         <Box title="Mensajes por Contacto" sub="Ranking de interacción">
           <div className="mt-4 space-y-4">
             {!topCandidatos.length && <p className="text-slate-300 text-sm italic text-center py-8">Sin datos aún</p>}
@@ -114,7 +167,7 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-700 truncate">{c.nombre}</p>
                   <div className="h-1.5 bg-blue-50 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100, (c.msgs / (topCandidatos[0]?.msgs || 1)) * 100)}%`}} />
+                    <div className="h-full bg-blue-500 rounded-full" style={{width: `${Math.min(100, (c.msgs / (topCandidatos[0]?.msgs || 1)) * 100)}%`}}/>
                   </div>
                 </div>
                 <span className="text-xs font-black text-blue-600">{c.msgs}</span>
@@ -126,7 +179,7 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
 
       <section className="space-y-6">
         <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
-          <span className="w-2 h-8 bg-blue-600 rounded-full" /> Monitor de CEDIS Activos
+          <span className="w-2 h-8 bg-blue-600 rounded-full"/> Monitor de CEDIS Activos
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {vacantes?.map((v: any) => (
@@ -152,14 +205,21 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
   )
 }
 
-function StatCard({ title, value, icon, color, iconColor }: any) {
+function StatCard({ title, value, icon, color, iconColor, compare }: any) {
   return (
     <div className={`bg-white p-8 rounded-[2.5rem] border-t-4 ${color} shadow-lg shadow-slate-100 flex flex-col justify-between h-56 hover:-translate-y-1 transition-all`}>
       <div className="flex justify-between items-start text-slate-300">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] w-24 leading-relaxed">{title}</p>
         <div className={`p-4 bg-slate-50 rounded-2xl ${iconColor}`}>{icon}</div>
       </div>
-      <h3 className="text-4xl font-black text-slate-800">{value}</h3>
+      <div>
+        <h3 className="text-4xl font-black text-slate-800">{value}</h3>
+        {compare && (
+          <p className={`text-[10px] font-bold mt-2 italic tracking-tighter ${compare.up ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {compare.label}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

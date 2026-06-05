@@ -10,9 +10,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
   return (
     <>
-      {/* SIDEBAR — w-0 cuando cerrado = desaparece completamente */}
       <aside className={`${isOpen ? 'w-64' : 'w-0'} overflow-hidden shrink-0 bg-white border-r border-slate-100 transition-all duration-300 flex flex-col h-screen sticky top-0`}>
-        <div className="min-w-[256px]">
+        <div className="min-w-[256px] flex flex-col flex-1">
           <div className="h-24 flex items-center px-4 border-b border-slate-50">
             <img src="/logo-hr.jpg" alt="Logo HR" className="h-16 w-auto mx-auto object-contain" />
           </div>
@@ -23,18 +22,25 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
             <NavItem href="/perfiles" icon={<Briefcase size={20}/>} label="Perfiles" active={pathname === '/perfiles'} />
           </nav>
           <div className="p-4 border-t border-slate-50 text-[10px] text-slate-400 font-bold text-center leading-tight">
-            RIO LOGÍSTICA 2026 <br/>
+            Rio Logística® 2026<br/>
             <span className="font-medium">Todos los derechos reservados</span>
           </div>
         </div>
       </aside>
 
-      {/* CONTENIDO */}
       <div className="flex-1 flex flex-col min-w-0 bg-white">
         <header className="h-20 bg-white border-b border-slate-100 flex items-center justify-between px-8 sticky top-0 z-10">
-          <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
-            {isOpen ? <X size={24}/> : <Menu size={24}/>}
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
+              {isOpen ? <X size={24}/> : <Menu size={24}/>}
+            </button>
+            {!isOpen && (
+              <div className="flex items-center gap-2">
+                <img src="/logo-hr.jpg" alt="Logo" className="h-8 w-auto object-contain" />
+                <span className="text-sm font-black text-slate-800 tracking-tight">Rio Logística<sup className="text-[8px]">®</sup></span>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-6">
             <Bell className="text-slate-300 cursor-pointer" size={20}/>
             <div className="flex items-center gap-4 pl-6 border-l border-slate-100">
@@ -43,9 +49,9 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
                 <p className="text-[10px] text-blue-500 font-bold uppercase italic animate-pulse">Core Online</p>
               </div>
               <div className="relative flex items-center justify-center">
-                <div className="absolute w-10 h-10 bg-blue-400 rounded-full animate-ping opacity-20" />
+                <div className="absolute w-10 h-10 bg-blue-400 rounded-full animate-ping opacity-20"/>
                 <div className="relative w-10 h-10 bg-gradient-to-tr from-blue-700 to-blue-400 rounded-full border-2 border-white shadow-md flex items-center justify-center">
-                  <Cpu size={18} className="text-white" />
+                  <Cpu size={18} className="text-white"/>
                 </div>
               </div>
             </div>
