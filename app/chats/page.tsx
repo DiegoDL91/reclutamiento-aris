@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Search, Filter, Download, MessageCircle, ExternalLink, Cpu } from 'lucide-react'
+import { Search, Filter, Download, MessageCircle, ExternalLink, Cpu, X } from 'lucide-react'
 
 const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','esta_embarazada','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
 
@@ -31,6 +31,7 @@ export default function ChatsPage() {
   const [filtroEstatus, setFiltroEstatus] = useState('')
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [pagina, setPagina] = useState(1)
+  const [candidatoModal, setCandidatoModal] = useState<any>(null)
 
   useEffect(() => {
     supabase.from('candidatos_respuestas').select('*').order('fecha_registro', { ascending: false })
@@ -65,9 +66,66 @@ export default function ChatsPage() {
     URL.revokeObjectURL(url)
   }
 
+  const historialParsed = (historial: any) => {
+    try { return JSON.parse(historial || '[]') } catch { return [] }
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
 
+      {/* MODAL HISTORIAL */}
+      {candidatoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+            
+            {/* Header modal */}
+            <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
+              <div>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Conversación ARIS</p>
+                <h3 className="font-black text-slate-800 text-lg uppercase">{candidatoModal.nombre_completo || 'Candidato'}</h3>
+                <p className="text-[10px] text-slate-400 font-bold">{candidatoModal.telefono_whatsapp}</p>
+              </div>
+              <button onClick={() => setCandidatoModal(null)} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
+                <X size={20} className="text-slate-400"/>
+              </button>
+            </div>
+
+            {/* Chat bubbles */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {historialParsed(candidatoModal.historial).length === 0 && (
+                <p className="text-center text-slate-300 italic text-sm py-10">Sin mensajes registrados</p>
+              )}
+              {historialParsed(candidatoModal.historial).map((msg: any, i: number) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-blue-600 text-white rounded-br-sm'
+                      : 'bg-slate-100 text-slate-700 rounded-bl-sm'
+                  }`}>
+                    {msg.role === 'assistant' && (
+                      <p className="text-[8px] font-black text-blue-500 uppercase mb-1">ARIS</p>
+                    )}
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer modal */}
+            <div className="px-8 py-4 border-t border-slate-100 flex justify-between items-center">
+              <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${COLORES[candidatoModal.estatus] || 'bg-slate-100 text-slate-500'}`}>
+                {candidatoModal.estatus || 'Nuevo'}
+              </span>
+              <button onClick={() => window.open(`https://wa.me/${candidatoModal.telefono_whatsapp}`, '_blank')}
+                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-black transition-all">
+                <ExternalLink size={14}/> Abrir en WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Centro de Mensajes</h1>
@@ -157,12 +215,12 @@ export default function ChatsPage() {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => window.open(`https://wa.me/${item.telefono_whatsapp}`, '_blank')}
-                          className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all" title="Abrir WhatsApp">
+                        <button onClick={() => setCandidatoModal(item)}
+                          className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all" title="Ver conversación">
                           <MessageCircle size={18}/>
                         </button>
                         <button onClick={() => window.open(`https://wa.me/${item.telefono_whatsapp}`, '_blank')}
-                          className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-200 transition-all" title="Abrir chat">
+                          className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-200 transition-all" title="Abrir en WhatsApp">
                           <ExternalLink size={18}/>
                         </button>
                       </div>
