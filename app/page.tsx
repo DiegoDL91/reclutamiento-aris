@@ -2,6 +2,7 @@ import { supabase } from './lib/supabase'
 import { Users, MessageCircle, TrendingUp, BarChart3, Plus, MapPin } from 'lucide-react'
 import Link from 'next/link'
 import MonthSelector from './components/MonthSelector'
+import AutoRefresh from './components/AutoRefresh'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,10 +45,8 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
 
   const parseMsgs = (h: any) => { try { return JSON.parse(h || '[]').length } catch { return 0 } }
   const totalMensajes = todos?.reduce((a, c) => a + parseMsgs(c.historial), 0) || 0
-
   const mensajesMes = (todos || []).filter(c => c.fecha_registro >= desde && c.fecha_registro <= hasta).reduce((a, c) => a + parseMsgs(c.historial), 0)
   const mensajesAnt = (todos || []).filter(c => c.fecha_registro >= desdeAnt && c.fecha_registro <= hastaAnt).reduce((a, c) => a + parseMsgs(c.historial), 0)
-
   const promedio = (contactosMes || 0) > 0 ? Math.round(mensajesMes / (contactosMes || 1)) : 0
   const promedioAnt = (contactosAnt || 0) > 0 ? Math.round(mensajesAnt / (contactosAnt || 1)) : 0
 
@@ -62,7 +61,6 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
     return { label: `${d >= 0 ? '↑' : '↓'} ${Math.abs(d)}% vs mes anterior`, up: d >= 0 }
   }
 
-  // Gráfica 7 días
   const diasMap: Record<string, number> = {}
   const diasLabels: string[] = []
   for (let i = 6; i >= 0; i--) {
@@ -75,7 +73,6 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
   const chartBars = Object.values(diasMap)
   const maxBar = Math.max(...chartBars, 1)
 
-  // Gráfica anual
   const porMes = Array(12).fill(0)
   todoAnio?.forEach(c => { const m = new Date(c.fecha_registro).getMonth(); porMes[m]++ })
   const mesesHastaHoy = porMes.slice(0, now.getMonth() + 1)
@@ -83,6 +80,7 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 bg-white pb-20">
+      <AutoRefresh intervalo={120000} />
 
       <div className="flex justify-between items-end">
         <div className="flex flex-col gap-2">
@@ -116,7 +114,6 @@ export default async function Home({ searchParams }: { searchParams: { mes?: str
             ))}
           </div>
         </Box>
-
         <Box title="Candidatos por Mes" sub={`Actividad mensual — ${year}`}>
           <div className="h-56 flex items-end justify-between px-2 border-b border-slate-100 gap-1 pb-1">
             {mesesHastaHoy.map((v, i) => (

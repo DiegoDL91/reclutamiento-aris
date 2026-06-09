@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Search, MoreHorizontal, Calendar } from 'lucide-react'
 
-const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','esta_embarazada','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
+const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','apoyo_cuidado_hijos','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
 
 const progreso = (p: any) => CAMPOS.filter(c => p[c] !== null && p[c] !== undefined).length
 
@@ -25,7 +25,11 @@ export default function ProspectosPage() {
     setProspectos(data || [])
   }
 
-  useEffect(() => { cargarProspectos() }, [mesSeleccionado])
+  useEffect(() => {
+    cargarProspectos()
+    const id = setInterval(cargarProspectos, 120000)
+    return () => clearInterval(id)
+  }, [mesSeleccionado])
 
   const filtrados = prospectos.filter(p => {
     if (!busqueda) return true
@@ -41,12 +45,12 @@ export default function ProspectosPage() {
   ]
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-10 pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Prospectos</h1>
           <div className="flex items-center gap-2 mt-1">
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm text-slate-800">
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
               <Calendar size={14} className="text-blue-600"/>
               <select value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)}
                 className="text-xs font-black uppercase tracking-widest outline-none bg-transparent cursor-pointer">
@@ -76,9 +80,8 @@ export default function ProspectosPage() {
                   {filtrados.filter(p => p.estatus === col.id).length}
                 </span>
               </div>
-              <MoreHorizontal size={18} className="text-slate-300 cursor-pointer"/>
+              <MoreHorizontal size={18} className="text-slate-300"/>
             </div>
-
             <div className="bg-slate-50/40 p-4 rounded-[2.5rem] border border-slate-100 min-h-[500px] space-y-5">
               {filtrados.filter(p => p.estatus === col.id).map((p: any) => {
                 const avance = progreso(p)
@@ -90,13 +93,11 @@ export default function ProspectosPage() {
                     </div>
                     <h4 className="font-bold text-slate-800 text-sm mb-1 group-hover:text-blue-600 transition-colors uppercase">{p.nombre_completo || 'Candidato Nuevo'}</h4>
                     <p className="text-[10px] text-slate-400 font-bold mb-3 tracking-tight">{p.telefono_whatsapp}</p>
-
                     <div className="flex gap-1.5 flex-wrap mb-3">
                       {p.turno_preferido && <span className="text-[8px] bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full font-bold uppercase">{p.turno_preferido}</span>}
                       {p.edad && <span className="text-[8px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">{p.edad} años</span>}
                       {p.zona_vivienda && <span className="text-[8px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold truncate max-w-[100px]">{p.zona_vivienda}</span>}
                     </div>
-
                     <div className="pt-3 border-t border-slate-50">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Avance entrevista</span>
@@ -109,7 +110,6 @@ export default function ProspectosPage() {
                   </div>
                 )
               })}
-
               {filtrados.filter(p => p.estatus === col.id).length === 0 && (
                 <div className="h-40 flex flex-col items-center justify-center text-[9px] text-slate-300 font-black uppercase tracking-[0.2em] text-center opacity-50 space-y-2">
                   <div className="w-8 h-8 border-2 border-dashed border-slate-200 rounded-full"/>
