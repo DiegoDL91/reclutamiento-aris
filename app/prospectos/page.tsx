@@ -52,9 +52,12 @@ export default function ProspectosPage() {
           <div className="flex items-center gap-2 mt-1">
             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
               <Calendar size={14} className="text-blue-600"/>
-              <select value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)}
-                className="text-xs font-black uppercase tracking-widest outline-none bg-transparent cursor-pointer">
-                {meses.map(m => <option key={m} value={m}>{m}</option>)}
+              <select
+                value={mesSeleccionado}
+                onChange={e => setMesSeleccionado(e.target.value)}
+                className="text-xs font-black uppercase tracking-widest outline-none bg-transparent cursor-pointer text-slate-800"
+              >
+                {meses.map(m => <option key={m} value={m} className="text-slate-800">{m.toUpperCase()}</option>)}
               </select>
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Rio Logística 2026</p>

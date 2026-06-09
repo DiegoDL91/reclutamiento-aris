@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Search, Filter, Download, MessageCircle, ExternalLink, Cpu, X } from 'lucide-react'
+import { Search, Filter, Download, MessageCircle, ExternalLink, Cpu, X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','apoyo_cuidado_hijos','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
 
@@ -85,7 +85,7 @@ export default function ChatsPage() {
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
             <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
               <div>
-                <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Conversación ARIS</p>
+                <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Conversación A.R.I.S.</p>
                 <h3 className="font-black text-slate-800 text-lg uppercase">{candidatoModal.nombre_completo || 'Candidato'}</h3>
                 <p className="text-[10px] text-slate-400 font-bold">{candidatoModal.telefono_whatsapp}</p>
               </div>
@@ -100,7 +100,7 @@ export default function ChatsPage() {
               {historialParsed(candidatoModal.historial).map((msg: any, i: number) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm'}`}>
-                    {msg.role === 'assistant' && <p className="text-[8px] font-black text-blue-500 uppercase mb-1">ARIS</p>}
+                    {msg.role === 'assistant' && <p className="text-[8px] font-black text-blue-500 uppercase mb-1">A.R.I.S.</p>}
                     {msg.content}
                   </div>
                 </div>
@@ -122,7 +122,7 @@ export default function ChatsPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Centro de Mensajes</h1>
-          <p className="text-sm text-slate-400 font-medium">Monitorea la actividad de ARIS en tiempo real vía WhatsApp</p>
+          <p className="text-sm text-slate-400 font-medium">Monitorea la actividad de A.R.I.S. en tiempo real vía WhatsApp</p>
         </div>
         <div className="flex gap-3">
           <button onClick={exportarCSV} className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-2xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm">
@@ -170,7 +170,7 @@ export default function ChatsPage() {
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Candidato</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Estatus</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Último Mensaje</th>
-                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha Registro</th>
+                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fecha</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Avance</th>
                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Acción</th>
               </tr>
@@ -230,9 +230,13 @@ export default function ChatsPage() {
           </p>
           <div className="flex gap-2">
             <button onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina === 1}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-400 disabled:opacity-40">Anterior</button>
+              className="flex items-center gap-1 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+              <ChevronLeft size={14}/> Anterior
+            </button>
             <button onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina >= totalPaginas}
-              className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-blue-600 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-40">Siguiente</button>
+              className="flex items-center gap-1 px-4 py-2 bg-blue-600 border border-blue-600 rounded-xl text-[10px] font-black uppercase text-white hover:bg-blue-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+              Siguiente <ChevronRight size={14}/>
+            </button>
           </div>
         </div>
       </div>
