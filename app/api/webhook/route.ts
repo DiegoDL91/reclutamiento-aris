@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     // GUARDADO 2: datos extraídos con coerción de tipos
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
-      'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_hijos',
+      'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_dependientes',
       'tiempo_traslado_minutos', 'inconveniente_traslado', 'escolaridad_comprobable',
       'experiencia_almacen_meses', 'areas_desempenadas', 'motivo_salida_anterior',
       'tiene_constancias_laborales', 'nivel_salud_percecion', 'enfermedades_cronicas',
