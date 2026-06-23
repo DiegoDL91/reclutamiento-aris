@@ -2,28 +2,35 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabase';
 import { arisBrain } from '../../lib/aris';
 
-// Campos que Supabase espera como boolean
 const BOOL_FIELDS = new Set([
   'inconveniente_traslado', 'tiene_constancias_laborales', 'problemas_respiratorios',
   'sufre_vertigo', 'usa_lentes', 'documentacion_completa_original',
   'tiene_botas_casquillo', 'es_reingreso'
 ]);
 
-// Campos que Supabase espera como integer
 const INT_FIELDS = new Set([
-  'edad', 'dependientes_economicos', 'tiempo_traslado_minutos',
+  'edad', 'tiempo_traslado_minutos',
   'experiencia_almacen_meses', 'nivel_salud_percecion'
 ]);
 
+const NEGATIVOS_DEP = ['no','nel','nop','cero','ninguno','ninguna','ningun','0','no tengo','sin dependientes'];
+
 const coerce = (campo: string, val: any): any => {
   if (val === null || val === undefined) return null;
+  const s = String(val).toLowerCase().trim();
 
   if (BOOL_FIELDS.has(campo)) {
     if (typeof val === 'boolean') return val;
-    const s = String(val).toLowerCase().trim();
     if (['si','sí','yes','true','1','verdadero'].includes(s)) return true;
-    if (['no','false','0','falso'].includes(s)) return false;
-    return null; // ambiguo, no guardar
+    if (['no','false','0','falso','nel','nop'].includes(s)) return false;
+    return null;
+  }
+
+  if (campo === 'dependientes_economicos') {
+    if (NEGATIVOS_DEP.some(n => s === n) || s.startsWith('no ') || s === 'no') {
+      return 'ninguno';
+    }
+    return String(val);
   }
 
   if (INT_FIELDS.has(campo)) {
@@ -59,7 +66,7 @@ export async function POST(req: Request) {
     const objetoIA = JSON.parse(rawRespuesta);
     const ex = objetoIA.extraccion || {};
 
-    // GUARDADO 1: crítico (memoria + estado)
+    // GUARDADO 1: crítico
     const critico: any = { telefono_whatsapp: tel, estatus: objetoIA.estatus || 'Nuevo' };
     if (objetoIA._historial) critico.historial = JSON.stringify(objetoIA._historial);
     if (objetoIA.cedis && objetoIA.cedis !== 'null') critico.vacante_cedis = objetoIA.cedis;
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
       .upsert(critico, { onConflict: 'telefono_whatsapp' });
     if (e1) console.error('Error guardando memoria:', e1.message);
 
-    // GUARDADO 2: datos extraídos con coerción de tipos
+    // GUARDADO 2: datos extraídos
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
       'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_dependientes',
@@ -99,7 +106,9 @@ export async function POST(req: Request) {
       const { error: e2 } = await supabase
         .from('candidatos_respuestas')
         .upsert(datos, { onConflict: 'telefono_whatsapp' });
-      if (e2) console.error('Error guardando datos:', e2.message);
+      if (e2) console.error('Error guardando datos:', e2.message, JSON.stringify(datos));
+    } else {
+      console.log('Sin datos. Extraccion:', JSON.stringify(ex));
     }
 
     await enviarWhatsApp(tel, objetoIA.pregunta);
