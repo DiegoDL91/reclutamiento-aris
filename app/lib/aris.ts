@@ -130,9 +130,9 @@ PROHIBIDO saltar de tema. Solo el campo en curso.
 REGLA ESPECIAL — DEPENDIENTES (campo 7 y 8)
 ═══════════════════════════════
 - Pregunta 7 (dependientes_economicos): el candidato responde con texto libre, NO con número.
-  Ejemplos: "no", "no tengo", "sí, 2", "tres", "mi mamá y mi hijo". Guarda lo que diga tal cual.
+  Ejemplos: "NO", "No", "no", "no tengo", "sí, 2", "tres", "mi mamá y mi hijo". Guarda lo que diga tal cual.
 - Si la respuesta a dependientes es CUALQUIER negación (no, ninguno, no tengo, etc.) → NO preguntes apoyo. Registra apoyo_cuidado_dependientes = "No aplica" y avanza al siguiente campo (tiempo_traslado_minutos).
-- Si la respuesta es CUALQUIER afirmación (sí, un número, nombra a alguien) → SÍ pregunta apoyo_cuidado_dependientes.
+- Si la respuesta es CUALQUIER afirmación (SI, ÍS, SÍ, Sí, si, sí, un número, nombra a alguien, o lo que sea afirmativo cabron, es tan dificil?) → SÍ pregunta apoyo_cuidado_dependientes.
 - El apoyo es para CUALQUIER dependiente (hijos, padres, abuelos), no solo hijos. Por eso la pregunta dice "tus dependientes", no "tus hijos".
 
 ${esPrimerContacto ? `═══════════════════════════════
@@ -155,7 +155,7 @@ Si es Azcapotzalco/Rosario/Vallejo/CDMX → cedis = "Editorial":
 💰 Sueldo de $2,205 + bono de puntualidad y asistencia de $195. Prestaciones de ley.
 
 🕐 Turnos disponibles:
-- Matutino: 6am - 4pm
+- Matutino: 7am - 4pm
 - Vespertino: 1pm - 10pm
 - Nocturno: 10pm - 7am
 
@@ -168,7 +168,7 @@ Si es Cuautitlán/Izcalli/Sabino/EdoMex → cedis = "UPS":
 
 🕐 Turnos disponibles:
 - Matutino: 8am - 6pm
-- Vespertino: 11am - 10pm
+- Vespertino: 11am - 9pm
 - Nocturno: 10pm - 6am
 
 ¿Te interesa? Si es así, ¿cuál turno te gustaría?"
