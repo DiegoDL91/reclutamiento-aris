@@ -12,40 +12,6 @@ const CAMPOS = [
   'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
 ];
 
-const PREGUNTAS: Record<string, string> = {
-  edad: '¿Cuántos años tienes?',
-  zona_vivienda: '¿En qué zona vives?',
-  turno_preferido: '¿Cuál es tu turno preferido: matutino, vespertino o nocturno?',
-  estado_civil: '¿Cuál es tu estado civil?',
-  dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
-  apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
-  tiempo_traslado_minutos: '¿Cuánto tiempo te toma trasladarte al trabajo, en minutos?',
-  inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
-  escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?',
-  experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén?',
-  areas_desempenadas: '¿En qué áreas te has desempeñado anteriormente?',
-  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
-  tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
-  nivel_salud_percecion: '¿Cómo calificarías tu salud general del 1 al 10?',
-  enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
-  lesiones_o_cirugias: '¿Has tenido alguna lesión o cirugía en el pasado?',
-  alergias: '¿Tienes alguna alergia que debamos conocer?',
-  problemas_respiratorios: '¿Tienes problemas respiratorios que debamos conocer?',
-  sufre_vertigo: '¿Sufres de vértigo?',
-  usa_lentes: '¿Usas lentes?',
-  credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
-  procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
-  tiene_botas_casquillo: '¿Tienes botas de casquillo?',
-  tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
-  referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió? ¿Cuál es su nombre?',
-};
-
-const NEGATIVOS = ['no','nel','nop','cero','ninguno','ninguna','ningun','0'];
-const esNegativo = (txt: string): boolean => {
-  const s = txt.toLowerCase().trim();
-  return NEGATIVOS.includes(s) || s.startsWith('no ') || s.includes('no tengo');
-};
-
 export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<string> => {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -59,204 +25,49 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   if (info?.historial) {
     try { historialCompleto = JSON.parse(info.historial); } catch {}
   }
-  const historialReciente = historialCompleto.slice(-4);
+  const historialReciente = historialCompleto.slice(-6);
 
   const estado: any = {};
   CAMPOS.forEach(c => { estado[c] = (info?.[c] ?? null); });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
 
-  const depVal = estado.dependientes_economicos;
-  const depEsCero = depVal !== null && depVal !== undefined &&
-    (depVal === 0 || String(depVal) === '0' || esNegativo(String(depVal)));
-
-  if (depEsCero && estado.apoyo_cuidado_dependientes === null) {
-    estado.apoyo_cuidado_dependientes = 'No aplica';
-  }
-
   const esPrimerContacto = !info || Object.values(estado).every(v => v === null);
-  const camposNulos = CAMPOS.filter(c => estado[c] === null || estado[c] === undefined);
 
-  // campoExtrayendo = lo que el usuario ACABA de responder (camposNulos[0])
-  // campoPorPreguntar = lo que hay que preguntar DESPUÉS (camposNulos[1])
-  const campoExtrayendo = esPrimerContacto ? null : (camposNulos[0] || null);
-
-  // Detectar si en ESTE mensaje el usuario dijo "no" a dependientes
-  const respondioNoDep = campoExtrayendo === 'dependientes_economicos' &&
-    esNegativo(String(mensajeUsuario));
-
-  // Campos que quedan DESPUÉS de guardar campoExtrayendo
-  let camposRestantes = esPrimerContacto ? camposNulos : camposNulos.slice(1);
-  if (respondioNoDep) {
-    camposRestantes = camposRestantes.filter(c => c !== 'apoyo_cuidado_dependientes');
-  }
-
-  const campoPorPreguntar = camposRestantes[0] || null;
-  const tocaPresentarVacante = estado.zona_vivienda !== null && estado.vacante_cedis === null;
-  const zonaRecienLlena = campoExtrayendo === 'zona_vivienda';
-
-  const preguntaReingreso = estado.vacante_cedis === 'UPS'
-    ? '¿Has trabajado anteriormente en Rio Logística o en UPS?'
-    : estado.vacante_cedis === 'Editorial'
-    ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House?'
-    : '¿Has trabajado anteriormente en Rio Logística?';
-
-  let preguntaSugerida = '';
-  if (esPrimerContacto) {
-    preguntaSugerida = 'PRESENTACIÓN';
-  } else if (zonaRecienLlena || tocaPresentarVacante) {
-    preguntaSugerida = 'VACANTE';
-  } else if (campoPorPreguntar === 'documentacion_completa_original') {
-    preguntaSugerida = 'DOCUMENTACIÓN';
-  } else if (campoPorPreguntar === 'cuenta_banco_santander_problemas') {
-    preguntaSugerida = 'BANCO';
-  } else if (campoPorPreguntar === 'es_reingreso') {
-    preguntaSugerida = preguntaReingreso;
-  } else if (campoPorPreguntar && PREGUNTAS[campoPorPreguntar]) {
-    preguntaSugerida = PREGUNTAS[campoPorPreguntar];
-  } else if (!campoPorPreguntar) {
-    preguntaSugerida = 'CIERRE';
-  }
-
-  const systemPrompt = `Eres A.R.I.S., IA de reclutamiento de Rio Logística. Entrevistas por WhatsApp para Auxiliar de Almacén.
-Tono: cálido, humano, profesional. Emojis ocasionales.
+  const systemPrompt = `Eres A.R.I.S., la IA de reclutamiento de Rio Logística. Tu objetivo es entrevistar candidatos de forma humana, empática y profesional.
 
 ═══════════════════
-ESTADO EN BD (ya guardado):
+REGLAS DE HUMANIDAD (CRÍTICO):
+═══════════════════
+1. ACUSE DE RECIBO: Antes de preguntar algo nuevo, comenta brevemente lo que el candidato te dijo. No saltes de tema como un robot.
+   - Si dice una enfermedad: "Lamento escuchar eso, anotado para cuidarte en el área."
+   - Si dice su nombre: "¡Mucho gusto, [nombre]! Vamos a comenzar."
+2. PROFUNDIZACIÓN: Si el usuario responde "Sí" a enfermedades, alergias o lesiones pero no dice cuáles, NO pases a la siguiente pregunta. Pregunta "¿Podrías decirme cuáles exactamente?"
+3. LÓGICA DE NEGOCIO:
+   - BOTAS: Si dice que NO tiene, pregunta: "¿Para cuándo podrías conseguirlas?". Es requisito de seguridad.
+   - INFONAVIT: Si dice que SÍ tiene, dile: "Perfecto, vas a necesitar tu hoja de retenciones actualizada, ¿cuentas con ella?".
+   - BANCO: Si es Santander: "¡Excelente! Eso facilita tu pago.". Si es otro: "No hay problema, te apoyaremos a tramitar una tarjeta de nómina.".
+
+═══════════════════
+ESTADO ACTUAL EN BASE DE DATOS:
 ═══════════════════
 ${JSON.stringify(estado, null, 2)}
 
-Completados: ${CAMPOS.length - camposNulos.length} / ${CAMPOS.length}
-
 ═══════════════════
-TU TAREA AHORA:
+TAREA:
 ═══════════════════
-${campoExtrayendo ? 
-`PASO 1 — EXTRAE: El candidato respondió "${campoExtrayendo}" con: "${mensajeUsuario}"
-→ Incluye "${campoExtrayendo}" en extraccion. OBLIGATORIO.
+- Identifica qué datos faltan por preguntar según el ESTADO.
+- Solo haz UNA PREGUNTA a la vez.
+- Si detectas VÉRTIGO = true o ANTECEDENTES PENALES graves = true, el estatus debe ser "Rechazado".
+- Si ya terminaste las 25 preguntas y todo está bien, el estatus es "Candidato Óptimo".
+- Mientras esté en la charla, el estatus es "Pendientes".
 
-PASO 2 — PREGUNTA LO SIGUIENTE: ${preguntaSugerida}` :
-`PRIMER CONTACTO — preséntate y pide nombre_completo`}
-
-PROHIBIDO: preguntar algo que ya tenga valor en el ESTADO. PROHIBIDO: repetir la pregunta que el candidato acaba de contestar.
-
-═══════════════════
-DEPENDIENTES — CRÍTICO:
-═══════════════════
-Si respuesta a dependientes = cualquier negación (no, ninguno, 0, no tengo, etc.):
-→ extraccion.dependientes_economicos = 0
-→ extraccion.apoyo_cuidado_dependientes = "No aplica"
-→ siguiente pregunta: tiempo_traslado_minutos
-
-Si respuesta = afirmación o número:
-→ extraccion.dependientes_economicos = número o texto
-→ siguiente pregunta: apoyo_cuidado_dependientes
-
-${esPrimerContacto ? `═══════════════════
-PRESENTACIÓN — texto exacto:
-═══════════════════
-"¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.
-
-Estoy aquí para acompañarte en todo tu proceso de selección de forma rápida y personalizada 🚀
-
-¿Cuál es tu nombre completo?"` : ''}
-
-${(zonaRecienLlena || tocaPresentarVacante) ? `═══════════════════
-VACANTE — según zona "${estado.zona_vivienda || mensajeUsuario}":
-═══════════════════
-CDMX/Azcapotzalco/Rosario/Vallejo → cedis="Editorial":
-"Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦
-
-💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.
-
-🕐 Turnos disponibles:
-- Matutino: 6am - 4pm
-- Vespertino: 1pm - 10pm
-- Nocturno: 10pm - 7am
-
-¿Te interesa? ¿Qué turno te gustaría?"
-
-Cuautitlán/Izcalli/Sabino/EdoMex → cedis="UPS":
-"Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦
-
-💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.
-
-🕐 Turnos disponibles:
-- Matutino: 8am - 6pm
-- Vespertino: 11am - 10pm
-- Nocturno: 10pm - 6am
-
-¿Te interesa? ¿Qué turno te gustaría?"
-
-Zona no clara → "¿Puedes trasladarte a Azcapotzalco CDMX o Cuautitlán Izcalli EdoMex?"
-Si menciona turno al aceptar → extrae turno_preferido en extraccion.
-Si NO le interesa → agradece y cierra.` : ''}
-
-${campoPorPreguntar === 'tiene_botas_casquillo' ? `═══════════════════
-BOTAS:
-═══════════════════
-Sin botas → "¿Podrías conseguirlas?" → Sí puede: true, continúa. No puede: false, continúa igual.
-UPS: botas obligatorias. Editorial: botas o tenis de casquillo.` : ''}
-
-${campoPorPreguntar === 'documentacion_completa_original' ? `═══════════════════
-DOCUMENTACIÓN — texto exacto:
-═══════════════════
-"Para continuar, necesitarás la siguiente documentación 📋
-
-✅ Originales:
-- INE
-- Solicitud de empleo firmada
-
-📄 Copias:
-- Acta de nacimiento
-- CURP
-- Comprobante de domicilio (no mayor a 3 meses)
-- Comprobante de estudios
-- Número de Seguro Social
-- Constancia de situación fiscal actualizada
-- Datos bancarios (cuenta, CLABE, número de tarjeta y banco)
-
-⚠️ Indispensable: Botas de casquillo y pantalón de mezclilla sin roturas
-
-¿Cuentas con toda esta documentación?"` : ''}
-
-${campoPorPreguntar === 'cuenta_banco_santander_problemas' ? `═══════════════════
-BANCO — 2 pasos:
-═══════════════════
-"Nuestros pagos se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
-Santander → cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
-Otro banco → "¿Has tenido algún adeudo, bloqueo o aclaración con Banco Santander?" → su respuesta = valor del campo` : ''}
-
-${!campoPorPreguntar && !esPrimerContacto ? `═══════════════════
-CIERRE — texto exacto:
-═══════════════════
-"Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"` : ''}
-
-═══════════════════
-CLASIFICACIÓN (el candidato no la ve):
-═══════════════════
-"Nuevo": en proceso
-Al terminar TODO:
-- "Rechazado": vértigo=true, antecedentes graves, botas=false definitivo
-- "Candidato Óptimo": completo, 18-50 años, sin impedimentos
-- "Pendiente": banco con problema, doc faltante conseguible, duda
-
-CEDIS: Editorial=Azcapotzalco, UPS=El Sabino. Nunca decirle al candidato.
-
-═══════════════════
 RESPONDE SOLO ESTE JSON:
-═══════════════════
 {
-  "pregunta": "tu mensaje",
-  "estatus": "Nuevo | Pendiente | Candidato Óptimo | Rechazado",
+  "pregunta": "mensaje empático + siguiente pregunta",
+  "estatus": "Nuevo | Pendientes | Candidato Óptimo | Rechazado",
   "cedis": "Editorial | UPS | null",
-  "extraccion": {
-    // Enteros: edad, tiempo_traslado_minutos, experiencia_almacen_meses, nivel_salud_percecion, dependientes_economicos (0 si negativo)
-    // Booleanos true/false: inconveniente_traslado, tiene_constancias_laborales, problemas_respiratorios, sufre_vertigo, usa_lentes, documentacion_completa_original, tiene_botas_casquillo, es_reingreso
-    // Texto: todo lo demás
-  }
-}
-
-Campos válidos: ${CAMPOS.join(', ')}.`;
+  "extraccion": { ...datos detectados en este mensaje... }
+}`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -264,64 +75,32 @@ Campos válidos: ${CAMPOS.join(', ')}.`;
     { role: 'user', content: mensajeUsuario }
   ];
 
-  const detectarCedis = (txt: any): string | null => {
-    const z = (txt || '').toLowerCase();
-    if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial';
-    if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla/.test(z)) return 'UPS';
-    return null;
-  };
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages,
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
+      })
+    });
 
-  for (let intento = 0; intento < 2; intento++) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-          temperature: 0.1,
-          response_format: { type: 'json_object' }
-        })
-      });
+    const resData = await response.json();
+    const parsed = JSON.parse(resData.choices[0].message.content);
 
-      const resData = await response.json();
-      const texto = resData?.choices?.[0]?.message?.content;
-      if (!texto) throw new Error('sin contenido');
+    // Persistencia del CEDIS
+    if (info?.vacante_cedis) parsed.cedis = info.vacante_cedis;
 
-      const parsed = JSON.parse(texto);
+    parsed._historial = [
+      ...historialCompleto,
+      { role: 'user', content: mensajeUsuario },
+      { role: 'assistant', content: parsed.pregunta }
+    ].slice(-40);
 
-      if (info?.vacante_cedis) {
-        parsed.cedis = info.vacante_cedis;
-      } else {
-        const detectado = detectarCedis(info?.zona_vivienda || mensajeUsuario);
-        if (detectado) parsed.cedis = detectado;
-      }
-
-      if (respondioNoDep || depEsCero) {
-        if (!parsed.extraccion) parsed.extraccion = {};
-        parsed.extraccion.apoyo_cuidado_dependientes = 'No aplica';
-        if (respondioNoDep) parsed.extraccion.dependientes_economicos = 0;
-      }
-
-      parsed._historial = [
-        ...historialCompleto,
-        { role: 'user', content: mensajeUsuario },
-        { role: 'assistant', content: parsed.pregunta }
-      ].slice(-40);
-
-      return JSON.stringify(parsed);
-
-    } catch (e) {
-      console.error(`OpenAI intento ${intento + 1}:`, e);
-      if (intento === 0) await new Promise(r => setTimeout(r, 800));
-    }
+    return JSON.stringify(parsed);
+  } catch (e) {
+    return JSON.stringify({ pregunta: "Perdona, se cortó la señal. ¿Me repites eso? 🙏", estatus: "Pendientes", extraccion: {} });
   }
-
-  return JSON.stringify({
-    pregunta: 'Permíteme un momento, por favor. ¿Me repites tu último mensaje? 🙏',
-    estatus: info?.estatus || 'Nuevo',
-    cedis: info?.vacante_cedis || null,
-    extraccion: {},
-    _historial: [...historialCompleto, { role: 'user', content: mensajeUsuario }].slice(-40)
-  });
 };

@@ -9,26 +9,18 @@ const BOOL_FIELDS = new Set([
 ]);
 
 const INT_FIELDS = new Set([
-  'edad', 'tiempo_traslado_minutos', 'experiencia_almacen_meses', 'nivel_salud_percecion'
+  'edad', 'tiempo_traslado_minutos', 'experiencia_almacen_meses', 'nivel_salud_percecion', 'dependientes_economicos'
 ]);
 
 const coerce = (campo: string, val: any): any => {
-  if (val === null || val === undefined) return null;
+  if (val === null || val === undefined || val === 'null') return null;
   const s = String(val).toLowerCase().trim();
 
   if (BOOL_FIELDS.has(campo)) {
     if (typeof val === 'boolean') return val;
-    if (['si','sí','yes','true','1','verdadero'].includes(s)) return true;
-    if (['no','false','0','falso','nel','nop'].includes(s)) return false;
+    if (['si','sí','yes','true','1'].includes(s)) return true;
+    if (['no','false','0','nel','nop'].includes(s)) return false;
     return null;
-  }
-
-  // dependientes: integer, maneja texto libre
-  if (campo === 'dependientes_economicos') {
-    if (typeof val === 'number') return Math.round(val);
-    // 0 ya viene forzado desde aris.ts para negativos
-    const n = parseInt(s);
-    return isNaN(n) ? 1 : n; // si no parsea (ej: "mi mamá"), asume 1
   }
 
   if (INT_FIELDS.has(campo)) {
@@ -50,70 +42,49 @@ async function enviarWhatsApp(tel: string, texto: string) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    if (body.event !== 'messages.upsert' || body.data?.key?.fromMe) return NextResponse.json({ status: 'ignored' });
 
-    if (body.event !== 'messages.upsert') return NextResponse.json({ status: 'ignored_event' });
-    if (body.data?.key?.fromMe === true) return NextResponse.json({ status: 'ignored_fromme' });
+    const texto = body.data?.message?.conversation || body.data?.message?.extendedTextMessage?.text || '';
+    const tel = body.data?.key?.remoteJid?.split('@')[0] || '';
 
-    const texto: string = body.data?.message?.conversation
-      || body.data?.message?.extendedTextMessage?.text || '';
-    const tel: string = body.data?.key?.remoteJid?.split('@')[0] || '';
+    if (!texto || !tel) return NextResponse.json({ status: 'no_data' });
 
-    if (!texto || !tel) return NextResponse.json({ status: 'ignored_no_text' });
-
+    // 1. Obtener respuesta de la IA
     const rawRespuesta = await arisBrain(texto, tel);
     const objetoIA = JSON.parse(rawRespuesta);
     const ex = objetoIA.extraccion || {};
 
-    // GUARDADO 1: crítico
-    const critico: any = { telefono_whatsapp: tel, estatus: objetoIA.estatus || 'Nuevo' };
-    if (objetoIA._historial) critico.historial = JSON.stringify(objetoIA._historial);
-    if (objetoIA.cedis && objetoIA.cedis !== 'null') critico.vacante_cedis = objetoIA.cedis;
+    // 2. Preparar el objeto de datos unificado
+    const datosParaGuardar: any = { 
+      telefono_whatsapp: tel, 
+      estatus: objetoIA.estatus || 'Pendientes' 
+    };
 
-    const { error: e1 } = await supabase
-      .from('candidatos_respuestas')
-      .upsert(critico, { onConflict: 'telefono_whatsapp' });
-    if (e1) console.error('Error guardando memoria:', e1.message);
+    if (objetoIA._historial) datosParaGuardar.historial = JSON.stringify(objetoIA._historial);
+    if (objetoIA.cedis && objetoIA.cedis !== 'null') datosParaGuardar.vacante_cedis = objetoIA.cedis;
 
-    // GUARDADO 2: datos extraídos
-    const campos = [
-      'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
-      'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_dependientes',
-      'tiempo_traslado_minutos', 'inconveniente_traslado', 'escolaridad_comprobable',
-      'experiencia_almacen_meses', 'areas_desempenadas', 'motivo_salida_anterior',
-      'tiene_constancias_laborales', 'nivel_salud_percecion', 'enfermedades_cronicas',
-      'lesiones_o_cirugias', 'alergias', 'problemas_respiratorios', 'sufre_vertigo',
-      'usa_lentes', 'credito_infonavit_fonacot', 'procesos_legales_antecedentes',
-      'documentacion_completa_original', 'tiene_botas_casquillo', 'tipo_calzado_actual',
-      'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
-    ];
-
-    const datos: any = { telefono_whatsapp: tel };
-    let hayDatos = false;
-
-    campos.forEach(c => {
-      if (ex?.[c] !== null && ex?.[c] !== undefined) {
-        const valor = coerce(c, ex[c]);
-        if (valor !== null && valor !== undefined) {
-          datos[c] = valor;
-          hayDatos = true;
-        }
+    // Mapear los campos extraídos con limpieza (coerce)
+    Object.keys(ex).forEach(key => {
+      const valorLimpio = coerce(key, ex[key]);
+      if (valorLimpio !== null) {
+        datosParaGuardar[key] = valorLimpio;
       }
     });
 
-    if (hayDatos) {
-      const { error: e2 } = await supabase
-        .from('candidatos_respuestas')
-        .upsert(datos, { onConflict: 'telefono_whatsapp' });
-      if (e2) console.error('Error guardando datos:', e2.message, JSON.stringify(datos));
-    } else {
-      console.log('Sin datos que guardar. extraccion:', JSON.stringify(ex));
-    }
+    // 3. Un solo guardado en Supabase (Eficiencia Stark)
+    const { error } = await supabase
+      .from('candidatos_respuestas')
+      .upsert(datosParaGuardar, { onConflict: 'telefono_whatsapp' });
 
+    if (error) console.error('Error DB:', error.message);
+
+    // 4. Enviar a WhatsApp
     await enviarWhatsApp(tel, objetoIA.pregunta);
+
     return NextResponse.json({ status: 'success' });
 
   } catch (error: any) {
-    console.error('Route error:', error.message);
+    console.error('Webhook Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
