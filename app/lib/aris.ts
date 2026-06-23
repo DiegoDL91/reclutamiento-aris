@@ -63,7 +63,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   // ¿Sin dependientes? → apoyo no aplica
   const depVal = estado.dependientes_economicos;
   const depLleno = depVal !== null && depVal !== undefined;
-  const negativos = ['no','ninguno','ningun','ninguna','0','cero','no tengo','nel','nop'];
+  const negativos = ['No','NO','no','ninguno','ningun','ninguna','0','cero','no tengo','nel','nop'];
   const depEsNegativo = depLleno && negativos.some(n => String(depVal).toLowerCase().trim() === n || String(depVal).toLowerCase().includes('no tengo') || String(depVal).toLowerCase().includes('ningun'));
 
   if (depEsNegativo && estado.apoyo_cuidado_dependientes === null) {
