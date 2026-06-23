@@ -9,11 +9,8 @@ const BOOL_FIELDS = new Set([
 ]);
 
 const INT_FIELDS = new Set([
-  'edad', 'tiempo_traslado_minutos',
-  'experiencia_almacen_meses', 'nivel_salud_percecion'
+  'edad', 'tiempo_traslado_minutos', 'experiencia_almacen_meses', 'nivel_salud_percecion'
 ]);
-
-const NEGATIVOS_DEP = ['no','nel','nop','cero','ninguno','ninguna','ningun','0','no tengo','sin dependientes'];
 
 const coerce = (campo: string, val: any): any => {
   if (val === null || val === undefined) return null;
@@ -26,15 +23,16 @@ const coerce = (campo: string, val: any): any => {
     return null;
   }
 
+  // dependientes: integer, maneja texto libre
   if (campo === 'dependientes_economicos') {
-    if (NEGATIVOS_DEP.some(n => s === n) || s.startsWith('no ') || s === 'no') {
-      return 'ninguno';
-    }
-    return String(val);
+    if (typeof val === 'number') return Math.round(val);
+    // 0 ya viene forzado desde aris.ts para negativos
+    const n = parseInt(s);
+    return isNaN(n) ? 1 : n; // si no parsea (ej: "mi mamá"), asume 1
   }
 
   if (INT_FIELDS.has(campo)) {
-    const n = parseInt(String(val));
+    const n = parseInt(s);
     return isNaN(n) ? null : n;
   }
 
@@ -108,7 +106,7 @@ export async function POST(req: Request) {
         .upsert(datos, { onConflict: 'telefono_whatsapp' });
       if (e2) console.error('Error guardando datos:', e2.message, JSON.stringify(datos));
     } else {
-      console.log('Sin datos. Extraccion:', JSON.stringify(ex));
+      console.log('Sin datos que guardar. extraccion:', JSON.stringify(ex));
     }
 
     await enviarWhatsApp(tel, objetoIA.pregunta);

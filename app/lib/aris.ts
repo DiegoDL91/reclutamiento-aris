@@ -12,22 +12,21 @@ const CAMPOS = [
   'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
 ];
 
-// Texto de cada pregunta — fuente única de verdad
 const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
   zona_vivienda: '¿En qué zona vives?',
-  turno_preferido: '¿Cuál es tu turno preferido?',
+  turno_preferido: '¿Cuál es tu turno preferido: matutino, vespertino o nocturno?',
   estado_civil: '¿Cuál es tu estado civil?',
   dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
-  tiempo_traslado_minutos: '¿Cuánto tiempo te toma trasladarte al trabajo, aproximadamente en minutos?',
+  tiempo_traslado_minutos: '¿Cuánto tiempo te toma trasladarte al trabajo, en minutos?',
   inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?',
   experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén?',
   areas_desempenadas: '¿En qué áreas te has desempeñado anteriormente?',
-  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida de tu empleo anterior?',
-  tiene_constancias_laborales: '¿Cuentas con constancias laborales de tus trabajos anteriores?',
-  nivel_salud_percecion: '¿Cómo calificarías tu salud general, del 1 al 10?',
+  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
+  tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
+  nivel_salud_percecion: '¿Cómo calificarías tu salud general del 1 al 10?',
   enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
   lesiones_o_cirugias: '¿Has tenido alguna lesión o cirugía en el pasado?',
   alergias: '¿Tienes alguna alergia que debamos conocer?',
@@ -36,9 +35,15 @@ const PREGUNTAS: Record<string, string> = {
   usa_lentes: '¿Usas lentes?',
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
-  tiene_botas_casquillo: '¿Tienes botas de casquillo para trabajar en el almacén?',
+  tiene_botas_casquillo: '¿Tienes botas de casquillo?',
   tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
-  referidos_familiares_nombres: '¿Algún familiar o conocido te refirió a Rio Logística? Si es así, ¿cuál es su nombre?',
+  referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió? ¿Cuál es su nombre?',
+};
+
+const NEGATIVOS = ['no','nel','nop','cero','ninguno','ninguna','ningun','0'];
+const esNegativo = (txt: string): boolean => {
+  const s = txt.toLowerCase().trim();
+  return NEGATIVOS.includes(s) || s.startsWith('no ') || s.includes('no tengo');
 };
 
 export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<string> => {
@@ -60,22 +65,34 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   CAMPOS.forEach(c => { estado[c] = (info?.[c] ?? null); });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
 
-  // ¿Sin dependientes? → apoyo no aplica
   const depVal = estado.dependientes_economicos;
-  const depLleno = depVal !== null && depVal !== undefined;
-  const negativos = ['No','NO','no','ninguno','ningun','ninguna','0','cero','no tengo','nel','nop'];
-  const depEsNegativo = depLleno && negativos.some(n => String(depVal).toLowerCase().trim() === n || String(depVal).toLowerCase().includes('no tengo') || String(depVal).toLowerCase().includes('ningun'));
+  const depEsCero = depVal !== null && depVal !== undefined &&
+    (depVal === 0 || String(depVal) === '0' || esNegativo(String(depVal)));
 
-  if (depEsNegativo && estado.apoyo_cuidado_dependientes === null) {
+  if (depEsCero && estado.apoyo_cuidado_dependientes === null) {
     estado.apoyo_cuidado_dependientes = 'No aplica';
   }
 
   const esPrimerContacto = !info || Object.values(estado).every(v => v === null);
   const camposNulos = CAMPOS.filter(c => estado[c] === null || estado[c] === undefined);
-  const campoEnCurso = camposNulos[0] || null;
 
-  // ¿Ya se presentó la vacante? Si zona está llena pero cedis es null, toca presentar vacante
+  // campoExtrayendo = lo que el usuario ACABA de responder (camposNulos[0])
+  // campoPorPreguntar = lo que hay que preguntar DESPUÉS (camposNulos[1])
+  const campoExtrayendo = esPrimerContacto ? null : (camposNulos[0] || null);
+
+  // Detectar si en ESTE mensaje el usuario dijo "no" a dependientes
+  const respondioNoDep = campoExtrayendo === 'dependientes_economicos' &&
+    esNegativo(String(mensajeUsuario));
+
+  // Campos que quedan DESPUÉS de guardar campoExtrayendo
+  let camposRestantes = esPrimerContacto ? camposNulos : camposNulos.slice(1);
+  if (respondioNoDep) {
+    camposRestantes = camposRestantes.filter(c => c !== 'apoyo_cuidado_dependientes');
+  }
+
+  const campoPorPreguntar = camposRestantes[0] || null;
   const tocaPresentarVacante = estado.zona_vivienda !== null && estado.vacante_cedis === null;
+  const zonaRecienLlena = campoExtrayendo === 'zona_vivienda';
 
   const preguntaReingreso = estado.vacante_cedis === 'UPS'
     ? '¿Has trabajado anteriormente en Rio Logística o en UPS?'
@@ -83,103 +100,106 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House?'
     : '¿Has trabajado anteriormente en Rio Logística?';
 
-  // Determinar la pregunta exacta a hacer
   let preguntaSugerida = '';
   if (esPrimerContacto) {
-    preguntaSugerida = 'PRESÉNTATE (ver formato abajo) y pide nombre_completo';
-  } else if (tocaPresentarVacante) {
-    preguntaSugerida = 'PRESENTA LA VACANTE (ver formato abajo)';
-  } else if (campoEnCurso === 'documentacion_completa_original') {
-    preguntaSugerida = 'ENVÍA EL MENSAJE DE DOCUMENTACIÓN (ver formato abajo)';
-  } else if (campoEnCurso === 'cuenta_banco_santander_problemas') {
-    preguntaSugerida = 'PREGUNTA POR EL BANCO (ver flujo abajo)';
-  } else if (campoEnCurso === 'es_reingreso') {
+    preguntaSugerida = 'PRESENTACIÓN';
+  } else if (zonaRecienLlena || tocaPresentarVacante) {
+    preguntaSugerida = 'VACANTE';
+  } else if (campoPorPreguntar === 'documentacion_completa_original') {
+    preguntaSugerida = 'DOCUMENTACIÓN';
+  } else if (campoPorPreguntar === 'cuenta_banco_santander_problemas') {
+    preguntaSugerida = 'BANCO';
+  } else if (campoPorPreguntar === 'es_reingreso') {
     preguntaSugerida = preguntaReingreso;
-  } else if (campoEnCurso && PREGUNTAS[campoEnCurso]) {
-    preguntaSugerida = PREGUNTAS[campoEnCurso];
-  } else if (!campoEnCurso) {
-    preguntaSugerida = 'CIERRA LA CONVERSACIÓN (ver formato abajo)';
+  } else if (campoPorPreguntar && PREGUNTAS[campoPorPreguntar]) {
+    preguntaSugerida = PREGUNTAS[campoPorPreguntar];
+  } else if (!campoPorPreguntar) {
+    preguntaSugerida = 'CIERRE';
   }
 
   const systemPrompt = `Eres A.R.I.S., IA de reclutamiento de Rio Logística. Entrevistas por WhatsApp para Auxiliar de Almacén.
-Tono cálido, profesional, humano. Emojis ocasionales.
+Tono: cálido, humano, profesional. Emojis ocasionales.
 
-═══════════════════════════════
-ESTADO DEL CANDIDATO:
-═══════════════════════════════
+═══════════════════
+ESTADO EN BD (ya guardado):
+═══════════════════
 ${JSON.stringify(estado, null, 2)}
 
-Campos llenos: ${CAMPOS.filter(c => estado[c] !== null && estado[c] !== undefined).length} de ${CAMPOS.length}
-Campo en curso AHORA: ${campoEnCurso || 'NINGUNO (cerrar)'}
+Completados: ${CAMPOS.length - camposNulos.length} / ${CAMPOS.length}
 
-═══════════════════════════════
-⚡ TU ÚNICA TAREA EN ESTE MENSAJE
-═══════════════════════════════
-1. El candidato acaba de responder a: "${campoEnCurso || 'cierre'}"
-   Su mensaje: "${mensajeUsuario}"
-   → EXTRAE el valor de "${campoEnCurso}" en el JSON (campo extraccion). OBLIGATORIO.
+═══════════════════
+TU TAREA AHORA:
+═══════════════════
+${campoExtrayendo ? 
+`PASO 1 — EXTRAE: El candidato respondió "${campoExtrayendo}" con: "${mensajeUsuario}"
+→ Incluye "${campoExtrayendo}" en extraccion. OBLIGATORIO.
 
-2. Tu siguiente pregunta debe ser EXACTAMENTE sobre esto:
-   → ${preguntaSugerida}
+PASO 2 — PREGUNTA LO SIGUIENTE: ${preguntaSugerida}` :
+`PRIMER CONTACTO — preséntate y pide nombre_completo`}
 
-PROHIBIDO preguntar por cualquier campo que YA tenga valor en el ESTADO.
-PROHIBIDO repetir una pregunta ya respondida.
-PROHIBIDO saltar de tema. Solo el campo en curso.
+PROHIBIDO: preguntar algo que ya tenga valor en el ESTADO. PROHIBIDO: repetir la pregunta que el candidato acaba de contestar.
 
-═══════════════════════════════
-REGLA ESPECIAL — DEPENDIENTES (campo 7 y 8)
-═══════════════════════════════
-- Pregunta 7 (dependientes_economicos): el candidato responde con texto libre, NO con número.
-  Ejemplos: "NO", "No", "no", "no tengo", "sí, 2", "tres", "mi mamá y mi hijo". Guarda lo que diga tal cual.
-- Si la respuesta a dependientes es CUALQUIER negación (no, ninguno, no tengo, etc.) → NO preguntes apoyo. Registra apoyo_cuidado_dependientes = "No aplica" y avanza al siguiente campo (tiempo_traslado_minutos).
-- Si la respuesta es CUALQUIER afirmación (SI, ÍS, SÍ, Sí, si, sí, un número, nombra a alguien, o lo que sea afirmativo cabron, es tan dificil?) → SÍ pregunta apoyo_cuidado_dependientes.
-- El apoyo es para CUALQUIER dependiente (hijos, padres, abuelos), no solo hijos. Por eso la pregunta dice "tus dependientes", no "tus hijos".
+═══════════════════
+DEPENDIENTES — CRÍTICO:
+═══════════════════
+Si respuesta a dependientes = cualquier negación (no, ninguno, 0, no tengo, etc.):
+→ extraccion.dependientes_economicos = 0
+→ extraccion.apoyo_cuidado_dependientes = "No aplica"
+→ siguiente pregunta: tiempo_traslado_minutos
 
-${esPrimerContacto ? `═══════════════════════════════
-PRIMER CONTACTO — usa EXACTAMENTE:
-═══════════════════════════════
+Si respuesta = afirmación o número:
+→ extraccion.dependientes_economicos = número o texto
+→ siguiente pregunta: apoyo_cuidado_dependientes
+
+${esPrimerContacto ? `═══════════════════
+PRESENTACIÓN — texto exacto:
+═══════════════════
 "¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.
 
 Estoy aquí para acompañarte en todo tu proceso de selección de forma rápida y personalizada 🚀
 
 ¿Cuál es tu nombre completo?"` : ''}
 
-${tocaPresentarVacante ? `═══════════════════════════════
-PRESENTAR VACANTE AHORA:
-═══════════════════════════════
-Según zona_vivienda = "${estado.zona_vivienda}":
-
-Si es Azcapotzalco/Rosario/Vallejo/CDMX → cedis = "Editorial":
+${(zonaRecienLlena || tocaPresentarVacante) ? `═══════════════════
+VACANTE — según zona "${estado.zona_vivienda || mensajeUsuario}":
+═══════════════════
+CDMX/Azcapotzalco/Rosario/Vallejo → cedis="Editorial":
 "Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦
 
-💰 Sueldo de $2,205 + bono de puntualidad y asistencia de $195. Prestaciones de ley.
+💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.
 
 🕐 Turnos disponibles:
-- Matutino: 7am - 4pm
+- Matutino: 6am - 4pm
 - Vespertino: 1pm - 10pm
 - Nocturno: 10pm - 7am
 
-¿Te interesa? Si es así, ¿cuál turno te gustaría?"
+¿Te interesa? ¿Qué turno te gustaría?"
 
-Si es Cuautitlán/Izcalli/Sabino/EdoMex → cedis = "UPS":
+Cuautitlán/Izcalli/Sabino/EdoMex → cedis="UPS":
 "Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦
 
-💰 Sueldo de $2,205 + bono de puntualidad y asistencia de $296. Prestaciones de ley.
+💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.
 
 🕐 Turnos disponibles:
 - Matutino: 8am - 6pm
-- Vespertino: 11am - 9pm
+- Vespertino: 11am - 10pm
 - Nocturno: 10pm - 6am
 
-¿Te interesa? Si es así, ¿cuál turno te gustaría?"
+¿Te interesa? ¿Qué turno te gustaría?"
 
-Si la zona no es clara, pregunta: "¿Puedes trasladarte a Azcapotzalco CDMX o a Cuautitlán Izcalli, Estado de México?"
-Si menciona el turno al aceptar, extrae turno_preferido en este mismo mensaje.
-Si NO le interesa, agradece y cierra.` : ''}
+Zona no clara → "¿Puedes trasladarte a Azcapotzalco CDMX o Cuautitlán Izcalli EdoMex?"
+Si menciona turno al aceptar → extrae turno_preferido en extraccion.
+Si NO le interesa → agradece y cierra.` : ''}
 
-${campoEnCurso === 'documentacion_completa_original' ? `═══════════════════════════════
-MENSAJE DE DOCUMENTACIÓN — usa EXACTAMENTE:
-═══════════════════════════════
+${campoPorPreguntar === 'tiene_botas_casquillo' ? `═══════════════════
+BOTAS:
+═══════════════════
+Sin botas → "¿Podrías conseguirlas?" → Sí puede: true, continúa. No puede: false, continúa igual.
+UPS: botas obligatorias. Editorial: botas o tenis de casquillo.` : ''}
+
+${campoPorPreguntar === 'documentacion_completa_original' ? `═══════════════════
+DOCUMENTACIÓN — texto exacto:
+═══════════════════
 "Para continuar, necesitarás la siguiente documentación 📋
 
 ✅ Originales:
@@ -199,47 +219,40 @@ MENSAJE DE DOCUMENTACIÓN — usa EXACTAMENTE:
 
 ¿Cuentas con toda esta documentación?"` : ''}
 
-${campoEnCurso === 'tiene_botas_casquillo' ? `═══════════════════════════════
-BOTAS:
-═══════════════════════════════
-Si dice que no tiene → pregunta "¿Podrías conseguirlas?". Si puede → registra tiene_botas_casquillo = true. Si definitivamente no → false. NUNCA cortes la entrevista por esto.
-UPS: botas obligatorias. Editorial: botas o tenis de casquillo.` : ''}
+${campoPorPreguntar === 'cuenta_banco_santander_problemas' ? `═══════════════════
+BANCO — 2 pasos:
+═══════════════════
+"Nuestros pagos se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
+Santander → cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
+Otro banco → "¿Has tenido algún adeudo, bloqueo o aclaración con Banco Santander?" → su respuesta = valor del campo` : ''}
 
-${campoEnCurso === 'cuenta_banco_santander_problemas' ? `═══════════════════════════════
-BANCO — flujo de 2 pasos:
-═══════════════════════════════
-Paso 1: "Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
-- Si responde Santander → registra cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
-- Si responde otro banco → "¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander anteriormente?" → su respuesta es el valor del campo` : ''}
+${!campoPorPreguntar && !esPrimerContacto ? `═══════════════════
+CIERRE — texto exacto:
+═══════════════════
+"Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"` : ''}
 
-${!campoEnCurso ? `═══════════════════════════════
-CIERRE — usa EXACTAMENTE:
-═══════════════════════════════
-"Muchas gracias por tu tiempo, ${estado.nombre_completo || ''} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"` : ''}
+═══════════════════
+CLASIFICACIÓN (el candidato no la ve):
+═══════════════════
+"Nuevo": en proceso
+Al terminar TODO:
+- "Rechazado": vértigo=true, antecedentes graves, botas=false definitivo
+- "Candidato Óptimo": completo, 18-50 años, sin impedimentos
+- "Pendiente": banco con problema, doc faltante conseguible, duda
 
-═══════════════════════════════
-CLASIFICACIÓN (estatus) — el candidato no la ve
-═══════════════════════════════
-- "Nuevo": entrevista en proceso (hay campos pendientes)
-- Solo cuando TODOS los campos estén llenos:
-  • "Rechazado": sufre_vertigo = true, antecedentes penales graves, o botas = false definitivo
-  • "Candidato Óptimo": completo, 19-45 años, sin impedimentos críticos
-  • "Pendiente": banco con problema, edad fuera de rango, situación dudosa
+CEDIS: Editorial=Azcapotzalco, UPS=El Sabino. Nunca decirle al candidato.
 
-CEDIS: Editorial = Azcapotzalco, UPS = El Sabino. NUNCA lo menciones al candidato.
-
-═══════════════════════════════
+═══════════════════
 RESPONDE SOLO ESTE JSON:
-═══════════════════════════════
+═══════════════════
 {
-  "pregunta": "tu mensaje (la pregunta sobre el campo en curso, o el texto exacto indicado arriba)",
+  "pregunta": "tu mensaje",
   "estatus": "Nuevo | Pendiente | Candidato Óptimo | Rechazado",
   "cedis": "Editorial | UPS | null",
   "extraccion": {
-    // OBLIGATORIO: incluir "${campoEnCurso}" con el valor que el candidato acaba de dar
-    // Números: edad, tiempo_traslado_minutos, experiencia_almacen_meses, nivel_salud_percecion
-    // Booleanos true/false (NUNCA "Si"/"No"): inconveniente_traslado, tiene_constancias_laborales, problemas_respiratorios, sufre_vertigo, usa_lentes, documentacion_completa_original, tiene_botas_casquillo, es_reingreso
-    // Texto (incluye dependientes_economicos): todo lo demás
+    // Enteros: edad, tiempo_traslado_minutos, experiencia_almacen_meses, nivel_salud_percecion, dependientes_economicos (0 si negativo)
+    // Booleanos true/false: inconveniente_traslado, tiene_constancias_laborales, problemas_respiratorios, sufre_vertigo, usa_lentes, documentacion_completa_original, tiene_botas_casquillo, es_reingreso
+    // Texto: todo lo demás
   }
 }
 
@@ -266,7 +279,7 @@ Campos válidos: ${CAMPOS.join(', ')}.`;
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages,
-          temperature: 0.15,
+          temperature: 0.1,
           response_format: { type: 'json_object' }
         })
       });
@@ -284,9 +297,10 @@ Campos válidos: ${CAMPOS.join(', ')}.`;
         if (detectado) parsed.cedis = detectado;
       }
 
-      if (depEsNegativo) {
+      if (respondioNoDep || depEsCero) {
         if (!parsed.extraccion) parsed.extraccion = {};
         parsed.extraccion.apoyo_cuidado_dependientes = 'No aplica';
+        if (respondioNoDep) parsed.extraccion.dependientes_economicos = 0;
       }
 
       parsed._historial = [
