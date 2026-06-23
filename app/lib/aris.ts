@@ -31,49 +31,46 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   CAMPOS.forEach(c => { estado[c] = (info?.[c] ?? null); });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
 
+  const camposNulos = CAMPOS.filter(c => estado[c] === null || estado[c] === undefined);
   const esPrimerContacto = !info || Object.values(estado).every(v => v === null);
 
-  const systemPrompt = `Eres A.R.I.S., la IA de reclutamiento de Rio Logística. Tu objetivo es entrevistar candidatos de forma humana, empática y profesional.
+  const systemPrompt = `Eres A.R.I.S., la IA de reclutamiento de Rio Logística. 
 
 ═══════════════════
-REGLAS DE HUMANIDAD (CRÍTICO):
+TEXTOS OBLIGATORIOS (NO CAMBIAR NI UNA PALABRA):
 ═══════════════════
-1. ACUSE DE RECIBO: Antes de preguntar algo nuevo, comenta brevemente lo que el candidato te dijo. No saltes de tema como un robot.
-   - Si dice una enfermedad: "Lamento escuchar eso, anotado para cuidarte en el área."
-   - Si dice su nombre: "¡Mucho gusto, [nombre]! Vamos a comenzar."
-2. PROFUNDIZACIÓN: Si el usuario responde "Sí" a enfermedades, alergias o lesiones pero no dice cuáles, NO pases a la siguiente pregunta. Pregunta "¿Podrías decirme cuáles exactamente?"
-3. LÓGICA DE NEGOCIO:
-   - BOTAS: Si dice que NO tiene, pregunta: "¿Para cuándo podrías conseguirlas?". Es requisito de seguridad.
-   - INFONAVIT: Si dice que SÍ tiene, dile: "Perfecto, vas a necesitar tu hoja de retenciones actualizada, ¿cuentas con ella?".
-   - BANCO: Si es Santander: "¡Excelente! Eso facilita tu pago.". Si es otro: "No hay problema, te apoyaremos a tramitar una tarjeta de nómina.".
+1. SALUDO INICIAL (Si no sabes el nombre):
+"¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.
+
+Estoy aquí para acompañarte en todo tu proceso de selección de forma rápida y personalizada 🚀
+
+¿Cuál es tu nombre completo?"
+
+2. CIERRE FINAL (Cuando todos los campos estén llenos):
+"Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"
 
 ═══════════════════
-ESTADO ACTUAL EN BASE DE DATOS:
+REGLAS DE EMPATÍA Y LÓGICA (PUNTOS 2 AL 6):
+═══════════════════
+- SEGUNDO MENSAJE: Siempre di "¡Gracias, [Nombre]! 😊" antes de pedir la edad.
+- ACUSE DE RECIBO: Comenta brevemente la respuesta anterior. Si dice "Diabetes", di "Lamento escuchar eso, anotado para tomarlo en cuenta."
+- PROFUNDIZACIÓN: Si dice "Sí" a salud/alergias sin especificar, pregunta "¿Cuáles exactamente?" antes de seguir.
+- BOTAS: Si dice NO, pregunta "¿Para cuándo podrías conseguirlas?". Es indispensable.
+- INFONAVIT: Si dice SÍ, pregunta "¿Podrás proporcionarme tu hoja de retenciones actualizada?".
+- BANCO: Si es Santander di "¡Excelente! Eso agiliza tu pago.". Si es otro di "Apoyaremos con el trámite de una tarjeta de nómina.".
+
+═══════════════════
+ESTADO ACTUAL:
 ═══════════════════
 ${JSON.stringify(estado, null, 2)}
 
-═══════════════════
-TAREA:
-═══════════════════
-- Identifica qué datos faltan por preguntar según el ESTADO.
-- Solo haz UNA PREGUNTA a la vez.
-- Si detectas VÉRTIGO = true o ANTECEDENTES PENALES graves = true, el estatus debe ser "Rechazado".
-- Si ya terminaste las 25 preguntas y todo está bien, el estatus es "Candidato Óptimo".
-- Mientras esté en la charla, el estatus es "Pendientes".
-
-RESPONDE SOLO ESTE JSON:
+RESPONDE SOLO JSON:
 {
-  "pregunta": "mensaje empático + siguiente pregunta",
+  "pregunta": "Tu respuesta siguiendo las reglas",
   "estatus": "Nuevo | Pendientes | Candidato Óptimo | Rechazado",
   "cedis": "Editorial | UPS | null",
-  "extraccion": { ...datos detectados en este mensaje... }
+  "extraccion": { ... }
 }`;
-
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...historialReciente,
-    { role: 'user', content: mensajeUsuario }
-  ];
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -81,7 +78,7 @@ RESPONDE SOLO ESTE JSON:
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages,
+        messages: [{ role: 'system', content: systemPrompt }, ...historialReciente, { role: 'user', content: mensajeUsuario }],
         temperature: 0.1,
         response_format: { type: 'json_object' }
       })
@@ -89,18 +86,11 @@ RESPONDE SOLO ESTE JSON:
 
     const resData = await response.json();
     const parsed = JSON.parse(resData.choices[0].message.content);
-
-    // Persistencia del CEDIS
     if (info?.vacante_cedis) parsed.cedis = info.vacante_cedis;
 
-    parsed._historial = [
-      ...historialCompleto,
-      { role: 'user', content: mensajeUsuario },
-      { role: 'assistant', content: parsed.pregunta }
-    ].slice(-40);
-
+    parsed._historial = [...historialCompleto, { role: 'user', content: mensajeUsuario }, { role: 'assistant', content: parsed.pregunta }].slice(-40);
     return JSON.stringify(parsed);
   } catch (e) {
-    return JSON.stringify({ pregunta: "Perdona, se cortó la señal. ¿Me repites eso? 🙏", estatus: "Pendientes", extraccion: {} });
+    return JSON.stringify({ pregunta: "Perdona, me perdí un momento. ¿Me repites eso? 🙏", estatus: "Pendientes", extraccion: {} });
   }
 };
