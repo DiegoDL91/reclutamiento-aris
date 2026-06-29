@@ -29,7 +29,7 @@ const PREGUNTAS: Record<string, string> = {
   nivel_salud_percecion: '¿Cómo calificarías tu salud general del 1 al 10?',
   enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
   lesiones_o_cirugias: '¿Has tenido alguna lesión o cirugía en el pasado?',
-  alergias: '¿Tienes alguna allergy que debamos conocer?',
+  alergias: '¿Tienes alguna alergia que debamos conocer?',
   problemas_respiratorios: '¿Tienes problemas respiratorios que debamos conocer?',
   sufre_vertigo: '¿Sufres de vértigo?',
   usa_lentes: '¿Usas lentes?',
@@ -134,7 +134,7 @@ ${campoExtrayendo ?
 `PASO 1 — EXTRAE: El candidato respondió "${campoExtrayendo}" con: "${mensajeUsuario}"
 → Incluye "${campoExtrayendo}" en extraccion. OBLIGATORIO.
 
-PASO 2 — PREGUNTA LO SIGUIENTE: ${preguntaSugerida}TONO — CRÍTICO:Antes de preguntar lo siguiente, reacciona BREVEMENTE a lo que dijo el candidato.Ejemplos naturales:- Dijeron algo positivo ("Sí", número, dato bueno) → "¡Perfecto!" / "Entendido 👍" / "Muy bien"- Dijeron algo difícil (enfermedad, cirugía, problema) → "Gracias por compartirlo" / "Entendido, lo tomo en cuenta"- Dijeron algo negativo para ellos (despido, sin documentos) → "Sin problema" / "No te preocupes"Una sola frase corta, natural. Luego la siguiente pregunta. No exageres.` :
+PASO 2 — PREGUNTA LO SIGUIENTE: ${preguntaSugerida}` :
 `PRIMER CONTACTO — preséntate y pide nombre_completo`}
 
 PROHIBIDO: preguntar algo que ya tenga valor en el ESTADO. PROHIBIDO: repetir la pregunta que el candidato acaba de contestar.
@@ -150,14 +150,6 @@ Si respuesta a dependientes = cualquier negación (no, ninguno, 0, no tengo, etc
 Si respuesta = afirmación o número:
 → extraccion.dependientes_economicos = número o texto
 → siguiente pregunta: apoyo_cuidado_dependientes
-
-═══════════════════
-PREGUNTAS QUE REQUIEREN DETALLE:
-═══════════════════
-Si el campo que estás extrayendo es enfermedades_cronicas, lesiones_o_cirugias, alergias o problemas_respiratoriosY el candidato responde solo "Sí" o "Tengo" sin dar detalles:
-→ NO avances al siguiente campo.
-→ Pregunta: "¿Cuáles?" o "¿Me podrías decir cuáles?" antes de continuar.
-→ Cuando te den el detalle, ESE es el valor a guardar y ahí sí avanzas.
 
 ${esPrimerContacto ? `═══════════════════
 PRESENTACIÓN — texto exacto:
@@ -199,21 +191,11 @@ Zona no clara → "¿Puedes trasladarte a Azcapotzalco CDMX o Cuautitlán Izcall
 Si menciona turno al aceptar → extrae turno_preferido en extraccion.
 Si NO le interesa → agradece y cierra.` : ''}
 
-═══════════════════
+${campoPorPreguntar === 'tiene_botas_casquillo' ? `═══════════════════
 BOTAS:
 ═══════════════════
-Si dice que SÍ tiene → extrae true, avanza a tipo_calzado_actual.
-Si dice que NO tiene → pregunta: "¿Podrías conseguirlas antes de ingresar?"  - Si puede → extrae tiene_botas_casquillo = true, avanza.  - Si definitivamente no → extrae false, avanza igual. NUNCA cortes la entrevista.
-UPS: botas obligatorias (tenis normales NO aplican). Editorial: botas O tenis de casquillo.
-
-═══════════════════
-INFONAVIT / FONACOT:
-═══════════════════
-Si el campo que acabas de extraer es credito_infonavit_fonacot y el candidato dijo "Sí":
-→ Antes de preguntar lo siguiente, agrega: "Para el expediente necesitaremos tu hoja de retenciones actualizada, ¿la tienes disponible o puedes conseguirla?"
-→ Guarda su respuesta como parte de credito_infonavit_fonacot (ej: "Sí, con Infonavit - tiene hoja de retenciones")
-→ Luego continúa con el siguiente campo.
-Si dijo "No" → solo continúa.
+Sin botas → "¿Podrías conseguirlas?" → Sí puede: true, continúa. No puede: false, continúa igual.
+UPS: botas obligatorias. Editorial: botas o tenis de casquillo.` : ''}
 
 ${campoPorPreguntar === 'documentacion_completa_original' ? `═══════════════════
 DOCUMENTACIÓN — texto exacto:
@@ -237,15 +219,12 @@ DOCUMENTACIÓN — texto exacto:
 
 ¿Cuentas con toda esta documentación?"` : ''}
 
-═══════════════════
+${campoPorPreguntar === 'cuenta_banco_santander_problemas' ? `═══════════════════
 BANCO — 2 pasos:
 ═══════════════════
-Paso 1: "Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
-Si responde Santander:
-→ "¡Perfecto, ya tienes todo listo para recibir tu nómina! 😊" → extrae cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
-Si responde otro banco (BBVA, Coppel, Azteca, etc.):
-→ "Sin problema 😊 Nuestro equipo te gestionará una tarjeta Santander para tu nómina, es un trámite sencillo que hacemos nosotros. Solo necesito saber: ¿has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander anteriormente?"
-→ Su respuesta = valor de cuenta_banco_santander_problemas
+"Nuestros pagos se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
+Santander → cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
+Otro banco → "¿Has tenido algún adeudo, bloqueo o aclaración con Banco Santander?" → su respuesta = valor del campo` : ''}
 
 ${!campoPorPreguntar && !esPrimerContacto ? `═══════════════════
 CIERRE — texto exacto:
@@ -253,7 +232,7 @@ CIERRE — texto exacto:
 "Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"` : ''}
 
 ═══════════════════
-CLASIFICACIÓN (el candidato no la veo):
+CLASIFICACIÓN (el candidato no la ve):
 ═══════════════════
 "Nuevo": en proceso
 Al terminar TODO:
