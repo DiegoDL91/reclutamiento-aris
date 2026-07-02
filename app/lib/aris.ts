@@ -22,12 +22,12 @@ const PREGUNTAS: Record<string, string> = {
   tiempo_traslado_minutos: '¿Cuánto tiempo te tomaría trasladarte al almacén de Rio Logística, en minutos aproximadamente?',
   inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?',
-  experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes trabajando en almacén? Si no tienes, dime "ninguna"',
+  experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén? (Si no tienes, dime "ninguna")',
   areas_desempenadas: '¿En qué áreas te has desempeñado anteriormente?',
   motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
-  tiene_constancias_laborales: '¿Cuentas con alguna constancia laboral de trabajos anteriores?',
-  nivel_salud_percecion: '¿Cómo calificarías tu estado de salud general del 1 al 10, siendo 10 excelente?',
-  enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos tomar en cuenta?',
+  tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
+  nivel_salud_percecion: '¿Cómo calificarías tu estado de salud del 1 al 10, siendo 10 excelente?',
+  enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
   lesiones_o_cirugias: '¿Has tenido alguna lesión o cirugía relevante?',
   alergias: '¿Tienes alguna alergia que debamos conocer?',
   problemas_respiratorios: '¿Tienes algún problema respiratorio que debamos considerar?',
@@ -36,14 +36,14 @@ const PREGUNTAS: Record<string, string> = {
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
   tiene_botas_casquillo: '¿Tienes botas de casquillo?',
+  tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
   referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió? ¿Cuál es su nombre?',
 };
 
-const NEGATIVOS = ['no','nel','nop','cero','ninguno','ninguna','ningun','0','nada','ninguna experiencia'];
+const NEGATIVOS = ['no','nel','nop','cero','ninguno','ninguna','ningun','0'];
 const esNegativo = (txt: string): boolean => {
   const s = txt.toLowerCase().trim();
-  return NEGATIVOS.includes(s) || s.startsWith('no ') || s.includes('no tengo') ||
-    s.includes('ninguna') || s.includes('sin experiencia') || s.includes('primer');
+  return NEGATIVOS.includes(s) || s.startsWith('no ') || s.includes('no tengo') || s.includes('ninguna');
 };
 
 const detectarCedis = (txt: any): string | null => {
@@ -52,6 +52,25 @@ const detectarCedis = (txt: any): string | null => {
   if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla/.test(z)) return 'UPS';
   return null;
 };
+
+const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
+
+✅ Originales:
+- INE
+- Solicitud de empleo firmada
+
+📄 Copias:
+- Acta de nacimiento
+- CURP
+- Comprobante de domicilio (no mayor a 3 meses)
+- Comprobante de estudios
+- Número de Seguro Social
+- Constancia de situación fiscal actualizada
+- Datos bancarios (cuenta, CLABE, número de tarjeta y banco)
+
+⚠️ Indispensable: Botas de casquillo y pantalón de mezclilla sin roturas
+
+¿Cuentas con toda esta documentación?`;
 
 export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<string> => {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -72,7 +91,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   CAMPOS.forEach(c => { estado[c] = (info?.[c] ?? null); });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
 
-  // Auto-skip: sin dependientes → apoyo no aplica
   const depVal = estado.dependientes_economicos;
   const depEsCero = depVal !== null && depVal !== undefined &&
     (depVal === 0 || String(depVal) === '0' || esNegativo(String(depVal)));
@@ -80,43 +98,20 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     estado.apoyo_cuidado_dependientes = 'No aplica';
   }
 
-  // Auto-skip: sin experiencia → áreas / motivo / constancias
-  const expVal = estado.experiencia_almacen_meses;
-  const sinExperiencia = expVal !== null && expVal !== undefined && Number(expVal) === 0;
-  if (sinExperiencia) {
-    if (estado.areas_desempenadas === null) estado.areas_desempenadas = 'Sin experiencia previa';
-    if (estado.motivo_salida_anterior === null) estado.motivo_salida_anterior = 'Sin empleo anterior';
-    if (estado.tiene_constancias_laborales === null) estado.tiene_constancias_laborales = false;
-  }
-
-  // Auto-fill tipo_calzado_actual desde botas (campo interno, no se pregunta)
-  const botasVal = estado.tiene_botas_casquillo;
-  if (botasVal !== null && botasVal !== undefined && estado.tipo_calzado_actual === null) {
-    estado.tipo_calzado_actual = botasVal === true ? 'Con botas de casquillo' : 'Sin botas (gestionando)';
-  }
-
   const esPrimerContacto = !info || Object.values(estado).every(v => v === null);
   const camposNulos = CAMPOS.filter(c => estado[c] === null || estado[c] === undefined);
-
   const campoExtrayendo = esPrimerContacto ? null : (camposNulos[0] || null);
 
   const respondioNoDep = campoExtrayendo === 'dependientes_economicos' && esNegativo(String(mensajeUsuario));
-  const respondioSinExp = campoExtrayendo === 'experiencia_almacen_meses' && esNegativo(String(mensajeUsuario));
 
   let camposRestantes = esPrimerContacto ? camposNulos : camposNulos.slice(1);
   if (respondioNoDep) camposRestantes = camposRestantes.filter(c => c !== 'apoyo_cuidado_dependientes');
-  if (respondioSinExp) camposRestantes = camposRestantes.filter(c =>
-    !['areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales'].includes(c));
 
   const campoPorPreguntar = camposRestantes[0] || null;
   const tocaPresentarVacante = estado.zona_vivienda !== null && estado.vacante_cedis === null;
   const zonaRecienLlena = campoExtrayendo === 'zona_vivienda';
 
-  // Calcular CEDIS y texto completo de vacante en TypeScript
-  const cedisDetectado = info?.vacante_cedis ||
-    detectarCedis(estado.zona_vivienda) ||
-    detectarCedis(mensajeUsuario);
-
+  const cedisDetectado = info?.vacante_cedis || detectarCedis(estado.zona_vivienda) || detectarCedis(mensajeUsuario);
   let textoVacante = '¿Puedes trasladarte a Azcapotzalco CDMX o a Cuautitlán Izcalli, Estado de México?';
   if (cedisDetectado === 'Editorial') {
     textoVacante = `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n• Matutino: 6am - 4pm\n• Vespertino: 1pm - 10pm\n• Nocturno: 10pm - 7am\n\n¿Te interesa? ¿Qué turno te gustaría?`;
@@ -130,24 +125,27 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House?'
     : '¿Has trabajado anteriormente en Rio Logística?';
 
+  const textoCierre = `Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!`;
+
+  // preguntaSugerida = SIEMPRE texto completo, NUNCA keywords
   let preguntaSugerida = '';
   if (esPrimerContacto) {
-    preguntaSugerida = 'PRESENTACIÓN';
+    preguntaSugerida = `¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.\n\nEstoy aquí para acompañarte en todo tu proceso de selección de forma rápida y personalizada 🚀\n\n¿Cuál es tu nombre completo?`;
   } else if (zonaRecienLlena || tocaPresentarVacante) {
-    preguntaSugerida = 'VACANTE';
+    preguntaSugerida = textoVacante;
   } else if (campoPorPreguntar === 'documentacion_completa_original') {
-    preguntaSugerida = 'DOCUMENTACIÓN';
+    preguntaSugerida = TEXT_DOC;
   } else if (campoPorPreguntar === 'cuenta_banco_santander_problemas') {
-    preguntaSugerida = 'BANCO';
+    preguntaSugerida = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
   } else if (campoPorPreguntar === 'es_reingreso') {
     preguntaSugerida = preguntaReingreso;
   } else if (campoPorPreguntar && PREGUNTAS[campoPorPreguntar]) {
     preguntaSugerida = PREGUNTAS[campoPorPreguntar];
   } else if (!campoPorPreguntar) {
-    preguntaSugerida = 'CIERRE';
+    preguntaSugerida = textoCierre;
   }
 
-  // Clasificación en TypeScript — no la decide el modelo
+  // Clasificación en TypeScript
   let clasificacionFinal = 'Nuevo';
   if (!campoPorPreguntar && !esPrimerContacto) {
     const vertigo = estado.sufre_vertigo;
@@ -155,150 +153,87 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     const cedis = estado.vacante_cedis;
     const banco = String(estado.cuenta_banco_santander_problemas || '').toLowerCase();
     const edad = Number(estado.edad);
-
     const esRechazo = vertigo === true || (botas === false && cedis === 'UPS');
-    const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') ||
-      banco.includes('problema') || (botas === false && cedis !== 'UPS') ||
-      edad < 18 || edad > 55;
-
+    const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('problema') ||
+      (botas === false && cedis !== 'UPS') || edad < 18 || edad > 55;
     clasificacionFinal = esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
   }
 
   const systemPrompt = `Eres A.R.I.S., IA de reclutamiento de Rio Logística. Entrevistas por WhatsApp para Auxiliar de Almacén.
 
-═══════════════════
-ESTADO EN BD (ya guardado):
-═══════════════════
+ESTADO EN BD (tu verdad absoluta):
 ${JSON.stringify(estado, null, 2)}
 
 Completados: ${CAMPOS.length - camposNulos.length} / ${CAMPOS.length}
 
-═══════════════════
-TU TAREA AHORA:
-═══════════════════
+══════════════════════════════════════
+TU TAREA EN ESTE MENSAJE:
+══════════════════════════════════════
 ${campoExtrayendo ?
-`PASO 1 — EXTRAE: El candidato respondió "${campoExtrayendo}" con: "${mensajeUsuario}"
-→ Incluye "${campoExtrayendo}" en extraccion. OBLIGATORIO.
+`PASO 1 — EXTRAE: El candidato respondió a "${campoExtrayendo}" con: "${mensajeUsuario}"
+Incluye "${campoExtrayendo}" en extraccion. OBLIGATORIO SIN EXCEPCIÓN.
 
-${(zonaRecienLlena || tocaPresentarVacante) ?
-`⚠️ PASO 2 — OBLIGATORIO: Debes enviar EXACTAMENTE este texto como "pregunta", sin cambiar ni una coma:
-"${textoVacante}"` :
-`PASO 2 — Tu siguiente mensaje será: "${preguntaSugerida}"`}`
-: `PRIMER CONTACTO — preséntate y pide nombre_completo.`}
+PASO 2 — ENVÍA EXACTAMENTE ESTE TEXTO como "pregunta" (copia y pega, no cambies ni una palabra):
+${preguntaSugerida}` :
+`PRIMER CONTACTO — Envía exactamente como "pregunta":
+${preguntaSugerida}`}
 
-PROHIBIDO: preguntar algo que ya tenga valor en el ESTADO.
-PROHIBIDO: repetir la pregunta que el candidato acaba de contestar.
+ATENCIÓN: El campo "pregunta" en tu JSON debe ser el texto del PASO 2. NUNCA palabras sueltas como "BANCO", "DOCUMENTACIÓN" o "CIERRE". Siempre un mensaje completo dirigido al candidato.
 
-═══════════════════
-TONO — CRÍTICO:
-═══════════════════
-Eres empática y humana. Una frase corta y natural ANTES de cada pregunta:
-- Respuesta positiva → "¡Perfecto!" / "¡Qué bien!" / "Entendido 👍" / "Anotado"
-- Enfermedad / cirugía → "Gracias por compartirlo, lo tomo en cuenta"
-- Sin experiencia → "¡No hay problema! Todos empezamos en algún momento 😊"
-- Despido / problema → "Sin problema, lo que importa es las ganas de trabajar"
-- Confusión del candidato → explica brevemente y repite la pregunta con contexto
+══════════════════════════════════════
+EXCEPCIONES (modifican el PASO 2):
+══════════════════════════════════════
 
-═══════════════════
-PREGUNTAS CON DETALLE:
-═══════════════════
-Si el campo actual es enfermedades_cronicas, lesiones_o_cirugias, alergias, problemas_respiratorios
-Y el candidato dice solo "Sí" sin especificar:
-→ NO avances. Pregunta "¿Cuáles?" y guarda el DETALLE como valor del campo.
+TONO: Puedes agregar UNA frase corta ANTES del PASO 2:
+- Enfermedad/lesión → "Gracias por compartirlo, lo tomo en cuenta."
+- Sin experiencia → "¡No hay problema, todos empezamos algún día! 😊"
+- Respuesta positiva → "¡Perfecto!" o "Entendido 👍"
+- Problema/negativo → "Sin problema,"
 
-═══════════════════
-DEPENDIENTES:
-═══════════════════
-Negación → extraccion.dependientes_economicos = 0, extraccion.apoyo_cuidado_dependientes = "No aplica", siguiente: tiempo_traslado_minutos.
-Afirmación → extrae y pregunta apoyo_cuidado_dependientes.
+DETALLE EN SALUD: Si extrajiste enfermedades_cronicas, lesiones_o_cirugias, alergias, o problemas_respiratorios, y el candidato solo dijo "Sí" sin detalles:
+→ NO envíes el PASO 2 todavía. Pregunta "¿Cuáles?" y espera el detalle. El detalle ES el valor a guardar.
 
-═══════════════════
-SIN EXPERIENCIA EN ALMACÉN:
-═══════════════════
-Si dice "no tengo", "ninguna", "es mi primera vez", etc.:
-→ extraccion.experiencia_almacen_meses = 0
-→ extraccion.areas_desempenadas = "Sin experiencia previa"
-→ extraccion.motivo_salida_anterior = "Sin empleo anterior"
-→ extraccion.tiene_constancias_laborales = false
-→ Avanza directo a nivel_salud_percecion. NO preguntes áreas ni motivo.
+DEPENDIENTES: Si "${campoExtrayendo}" es dependientes_economicos y la respuesta es negación:
+→ extraccion.dependientes_economicos = 0
+→ extraccion.apoyo_cuidado_dependientes = "No aplica"
 
-═══════════════════
-INFONAVIT / FONACOT:
-═══════════════════
-Si respondió SÍ a credito_infonavit_fonacot:
-→ Antes de la siguiente pregunta: "Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes disponible o puedes conseguirla?"
-→ Guarda la respuesta dentro del valor de credito_infonavit_fonacot (texto).
-Si respondió NO → continúa normalmente.
-
-═══════════════════
-BOTAS:
-═══════════════════
-SÍ tiene → extrae true, continúa.
-NO tiene → "¿Podrías conseguirlas antes de ingresar?"
-  → Sí puede: extrae true, continúa.
-  → No puede: extrae false, continúa. NUNCA cortes.
+BOTAS: Si "${campoPorPreguntar}" es tiene_botas_casquillo y el candidato dice que NO tiene:
+→ Pregunta: "¿Podrías conseguirlas antes de ingresar?"
+  • Sí puede → extrae true, continúa.
+  • No puede → extrae false, continúa igual. NUNCA termines la entrevista por esto.
 UPS: botas obligatorias. Editorial: botas O tenis de casquillo.
 
-${campoPorPreguntar === 'documentacion_completa_original' ? `═══════════════════
-DOCUMENTACIÓN — texto exacto:
-═══════════════════
-"Para continuar, necesitarás la siguiente documentación 📋
+INFONAVIT: Si "${campoExtrayendo}" es credito_infonavit_fonacot y dijo "Sí":
+→ Antes del PASO 2: "Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?"
+→ Su respuesta = parte del valor de credito_infonavit_fonacot. Luego continúa al PASO 2.
 
-✅ Originales:
-- INE
-- Solicitud de empleo firmada
+BANCO 2do PASO: Si el candidato acaba de decir su banco (BBVA, Coppel, etc.) y NO es Santander:
+→ Envía: "Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander anteriormente?"
+→ Su respuesta es el valor de cuenta_banco_santander_problemas.
+Si dice Santander → extrae "Sin problemas - ya tiene Santander" y envía el cierre si no hay más campos.
 
-📄 Copias:
-- Acta de nacimiento
-- CURP
-- Comprobante de domicilio (no mayor a 3 meses)
-- Comprobante de estudios
-- Número de Seguro Social
-- Constancia de situación fiscal actualizada
-- Datos bancarios (cuenta, CLABE, número de tarjeta y banco)
+DESPEDIDA: Si el candidato dice "adiós", "no me interesa", "hasta luego":
+→ "Sin problema, fue un gusto. Si en el futuro te interesa, aquí estaremos. ¡Que tengas excelente día! 😊"
 
-⚠️ Indispensable: Botas de casquillo y pantalón de mezclilla sin roturas
+PROHIBIDO:
+- Preguntar campos que ya tengan valor en el ESTADO.
+- Inventar preguntas no incluidas en el PASO 2.
+- Usar palabras clave como "BANCO", "CIERRE", "DOCUMENTACIÓN" como pregunta.
 
-¿Cuentas con toda esta documentación?"` : ''}
-
-${campoPorPreguntar === 'cuenta_banco_santander_problemas' ? `═══════════════════
-BANCO — 2 pasos:
-═══════════════════
-"Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?"
-
-Si responde Santander → "¡Perfecto, ya tienes todo listo para tu nómina! 😊" → extrae cuenta_banco_santander_problemas = "Sin problemas - ya tiene Santander"
-Si responde otro banco → "Sin problema 😊 Nuestro equipo te tramitará una tarjeta Santander para tu nómina, es algo que manejamos nosotros. Solo dime: ¿has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?" → su respuesta = valor` : ''}
-
-${esPrimerContacto ? `═══════════════════
-PRESENTACIÓN — texto exacto:
-═══════════════════
-"¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.
-
-Estoy aquí para acompañarte en todo tu proceso de selección de forma rápida y personalizada 🚀
-
-¿Cuál es tu nombre completo?"` : ''}
-
-${!campoPorPreguntar && !esPrimerContacto ? `═══════════════════
-CIERRE — texto exacto:
-═══════════════════
-"Muchas gracias por tu tiempo, ${estado.nombre_completo || '[nombre]'} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!"` : ''}
-
-Si el candidato dice "adiós", "bye", "olvídalo", "no me interesa", "hasta luego" → cierra: "Sin problema, fue un gusto. Si en el futuro te interesa, aquí estaremos. ¡Que tengas excelente día! 😊"
-
-Estatus: mientras haya campos pendientes = "Nuevo". Al terminar todo = "${clasificacionFinal}".
+Estatus actual: "${!campoPorPreguntar && !esPrimerContacto ? clasificacionFinal : 'Nuevo'}"
 CEDIS: Editorial=Azcapotzalco, UPS=El Sabino. Nunca decírselo al candidato.
 
-═══════════════════
+══════════════════════════════════════
 RESPONDE SOLO ESTE JSON:
-═══════════════════
+══════════════════════════════════════
 {
-  "pregunta": "tu mensaje",
+  "pregunta": "frase empática opcional + texto del PASO 2 completo",
   "estatus": "Nuevo | Pendiente | Candidato Óptimo | Rechazado",
   "cedis": "Editorial | UPS | null",
   "extraccion": {
-    // Enteros: edad, tiempo_traslado_minutos, experiencia_almacen_meses (0 si sin experiencia), nivel_salud_percecion, dependientes_economicos (0 si negativo)
+    // Enteros: edad, tiempo_traslado_minutos, experiencia_almacen_meses (0 si ninguna), nivel_salud_percecion, dependientes_economicos (0 si negativo)
     // Booleanos true/false: inconveniente_traslado, tiene_constancias_laborales, problemas_respiratorios, sufre_vertigo, usa_lentes, documentacion_completa_original, tiene_botas_casquillo, es_reingreso
-    // Texto: nombre_completo, zona_vivienda, turno_preferido, estado_civil, apoyo_cuidado_dependientes, escolaridad_comprobable, areas_desempenadas, motivo_salida_anterior, enfermedades_cronicas, lesiones_o_cirugias, alergias, credito_infonavit_fonacot, procesos_legales_antecedentes, referidos_familiares_nombres, cuenta_banco_santander_problemas
+    // Texto: todo lo demás
   }
 }
 
@@ -329,7 +264,6 @@ Campos válidos: ${CAMPOS.join(', ')}.`;
 
       const parsed = JSON.parse(texto);
 
-      // Override cedis
       if (info?.vacante_cedis) {
         parsed.cedis = info.vacante_cedis;
       } else {
@@ -337,32 +271,12 @@ Campos válidos: ${CAMPOS.join(', ')}.`;
         if (detectado) parsed.cedis = detectado;
       }
 
-      // Override clasificacion cuando termina
-      if (!campoPorPreguntar && !esPrimerContacto) {
-        parsed.estatus = clasificacionFinal;
-      }
+      if (!campoPorPreguntar && !esPrimerContacto) parsed.estatus = clasificacionFinal;
 
-      // Force auto-fills dependientes
       if (respondioNoDep || depEsCero) {
         if (!parsed.extraccion) parsed.extraccion = {};
         parsed.extraccion.apoyo_cuidado_dependientes = 'No aplica';
         if (respondioNoDep) parsed.extraccion.dependientes_economicos = 0;
-      }
-
-      // Force auto-fills sin experiencia
-      if (respondioSinExp || sinExperiencia) {
-        if (!parsed.extraccion) parsed.extraccion = {};
-        if (respondioSinExp) parsed.extraccion.experiencia_almacen_meses = 0;
-        if (!parsed.extraccion.areas_desempenadas) parsed.extraccion.areas_desempenadas = 'Sin experiencia previa';
-        if (!parsed.extraccion.motivo_salida_anterior) parsed.extraccion.motivo_salida_anterior = 'Sin empleo anterior';
-        if (parsed.extraccion.tiene_constancias_laborales === undefined) parsed.extraccion.tiene_constancias_laborales = false;
-      }
-
-      // Auto-fill tipo_calzado_actual desde botas
-      if (parsed.extraccion?.tiene_botas_casquillo !== undefined && parsed.extraccion?.tiene_botas_casquillo !== null) {
-        if (!parsed.extraccion) parsed.extraccion = {};
-        parsed.extraccion.tipo_calzado_actual = parsed.extraccion.tiene_botas_casquillo === true
-          ? 'Con botas de casquillo' : 'Sin botas (gestionando)';
       }
 
       parsed._historial = [
