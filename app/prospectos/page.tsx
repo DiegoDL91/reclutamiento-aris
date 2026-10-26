@@ -3,25 +3,26 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Search, MoreHorizontal, Calendar } from 'lucide-react'
 
-const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','apoyo_cuidado_hijos','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
+const CAMPOS = ['nombre_completo','edad','zona_vivienda','turno_preferido','estado_civil','dependientes_economicos','apoyo_cuidado_dependientes','tiempo_traslado_minutos','inconveniente_traslado','escolaridad_comprobable','experiencia_almacen_meses','areas_desempenadas','motivo_salida_anterior','tiene_constancias_laborales','nivel_salud_percecion','enfermedades_cronicas','lesiones_o_cirugias','alergias','problemas_respiratorios','sufre_vertigo','usa_lentes','credito_infonavit_fonacot','procesos_legales_antecedentes','documentacion_completa_original','tiene_botas_casquillo','tipo_calzado_actual','referidos_familiares_nombres','es_reingreso','cuenta_banco_santander_problemas']
 
 const progreso = (p: any) => CAMPOS.filter(c => p[c] !== null && p[c] !== undefined).length
 
 export default function ProspectosPage() {
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const [mesSeleccionado, setMesSeleccionado] = useState(meses[new Date().getMonth()])
+  const [mesSeleccionado, setMesSeleccionado] = useState('todos')
   const [prospectos, setProspectos] = useState<any[]>([])
   const [busqueda, setBusqueda] = useState('')
 
   const cargarProspectos = async () => {
-    const año = new Date().getFullYear()
-    const index = meses.indexOf(mesSeleccionado)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('candidatos_respuestas')
       .select('*')
-      .gte('fecha_registro', new Date(año, index, 1).toISOString())
-      .lte('fecha_registro', new Date(año, index + 1, 0, 23, 59, 59).toISOString())
       .order('fecha_registro', { ascending: false })
+
+    if (error) {
+      console.error('Error cargando prospectos:', error.message)
+      return
+    }
     setProspectos(data || [])
   }
 
@@ -29,9 +30,20 @@ export default function ProspectosPage() {
     cargarProspectos()
     const id = setInterval(cargarProspectos, 120000)
     return () => clearInterval(id)
-  }, [mesSeleccionado])
+  }, [])
+
+  // El mes es un filtro OPCIONAL. Por default ("todos") muestra a todos.
+  // Se filtra aquí en el navegador para no depender de rangos de fecha frágiles.
+  const coincideMes = (p: any) => {
+    if (mesSeleccionado === 'todos') return true
+    if (!p.fecha_registro) return true
+    const d = new Date(p.fecha_registro)
+    if (isNaN(d.getTime())) return true
+    return d.getMonth() === meses.indexOf(mesSeleccionado)
+  }
 
   const filtrados = prospectos.filter(p => {
+    if (!coincideMes(p)) return false
     if (!busqueda) return true
     const q = busqueda.toLowerCase()
     return (p.nombre_completo || '').toLowerCase().includes(q) || (p.telefono_whatsapp || '').includes(q)
@@ -57,6 +69,7 @@ export default function ProspectosPage() {
                 onChange={e => setMesSeleccionado(e.target.value)}
                 className="text-xs font-black uppercase tracking-widest outline-none bg-transparent cursor-pointer text-slate-800"
               >
+                <option value="todos" className="text-slate-800">TODOS</option>
                 {meses.map(m => <option key={m} value={m} className="text-slate-800">{m.toUpperCase()}</option>)}
               </select>
             </div>
