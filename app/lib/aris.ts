@@ -44,18 +44,20 @@ const PREGUNTAS: Record<string, string> = {
   usa_lentes: '¿Usas lentes?',
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
+  tiene_botas_casquillo: '¿Tienes botas de casquillo?',
   tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
   referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió?',
 };
 
 // Textos de seguimiento (2do/3er paso). El código los manda TAL CUAL.
-const FU_CUALES     = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
-const FU_BOTAS      = '¿Podrías conseguirlas antes de ingresar? 👢';
-const FU_INFONAVIT  = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
-const FU_REF_NOMBRE = '¡Qué bien! ¿Cuál es su nombre completo?';
-const Q_BANCO1      = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
-const FU_BANCO2     = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
-const FU_BANCO3     = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
+const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
+const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
+const FU_CUAL_CREDITO = '¿Cuál de los dos: Infonavit o Fonacot?';
+const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
+const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es su nombre completo?';
+const Q_BANCO1        = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
+const FU_BANCO2       = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
+const FU_BANCO3       = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
 
 const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
@@ -226,6 +228,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   let historial: { role: string; content: string }[] = [];
   if (info?.historial) { try { historial = JSON.parse(info.historial); } catch {} }
   const ultimoBot = [...historial].reverse().find(m => m.role === 'assistant')?.content || '';
+  const ultimoUser = [...historial].reverse().find(m => m.role === 'user')?.content || '';
 
   const estado: any = {};
   CAMPOS.forEach(c => { estado[c] = info?.[c] ?? null; });
@@ -293,9 +296,12 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   }
   else if (campoActual === 'credito_infonavit_fonacot') {
     if (ultimoBot === FU_INFONAVIT) {
-      extraccion.credito_infonavit_fonacot = 'Sí, tiene crédito. Hoja de retenciones: ' + String(mensajeUsuario).trim();
+      // El ultimoUser fue cuál crédito (Infonavit/Fonacot); este mensaje es la hoja
+      extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${String(mensajeUsuario).trim()}`;
+    } else if (ultimoBot === FU_CUAL_CREDITO) {
+      seguimiento = FU_INFONAVIT; // ya dijo cuál, ahora pedir la hoja
     } else if (esAfirmativo(mensajeUsuario) && !esNegativo(mensajeUsuario)) {
-      seguimiento = FU_INFONAVIT;
+      seguimiento = FU_CUAL_CREDITO; // dijo sí, preguntar cuál de los dos
     } else {
       extraccion.credito_infonavit_fonacot = 'No';
     }
