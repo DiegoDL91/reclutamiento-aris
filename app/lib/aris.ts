@@ -2,13 +2,8 @@ import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
    ARIS · Cerebro de entrevista (30 pasos)
-   ──────────────────────────────────────────────────────────────
-   REGLA DE ORO de esta versión:
-   • EL CÓDIGO decide y ESCRIBE cada pregunta (texto exacto).
-   • El sí/no y los números los entiende EL CÓDIGO (todas las formas).
-   • La IA queda SOLO de respaldo para respuestas ambiguas.
-   Resultado: ya no se filtran palabras como "BANCO"/"DOCUMENTACIÓN"/
-   "CIERRE", no se repiten preguntas, y la documentación sí se manda.
+   El CÓDIGO escribe cada pregunta. El sí/no lo entiende el código.
+   La IA solo es respaldo.
    ══════════════════════════════════════════════════════════════ */
 
 const CAMPOS = [
@@ -29,6 +24,7 @@ const SALUD_DETALLE = new Set(['enfermedades_cronicas', 'lesiones_o_cirugias', '
 
 const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
+  zona_vivienda: '¿En qué zona vives?',
   estado_civil: '¿Cuál es tu estado civil?',
   dependientes_economicos: '¿Tienes dependientes económicos a tu cargo? ¿Cuántos?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
@@ -49,15 +45,17 @@ const PREGUNTAS: Record<string, string> = {
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
   tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
-  referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió? ¿Cuál es su nombre?',
+  referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió?',
 };
 
-// Textos de seguimiento (2do paso). El código los manda TAL CUAL.
-const FU_CUALES    = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
-const FU_BOTAS     = '¿Podrías conseguirlas antes de ingresar? 👢';
-const FU_INFONAVIT = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
-const Q_BANCO1     = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
-const FU_BANCO2    = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
+// Textos de seguimiento (2do/3er paso). El código los manda TAL CUAL.
+const FU_CUALES     = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
+const FU_BOTAS      = '¿Podrías conseguirlas antes de ingresar? 👢';
+const FU_INFONAVIT  = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
+const FU_REF_NOMBRE = '¡Qué bien! ¿Cuál es su nombre completo?';
+const Q_BANCO1      = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
+const FU_BANCO2     = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
+const FU_BANCO3     = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
 
 const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
@@ -78,22 +76,26 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
 ¿Cuentas con toda esta documentación?`;
 
+const cierreTexto = (nombre: any): string =>
+  `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
+
 /* ── Normalizadores robustos de SÍ / NO ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-const esAfirmativo = (txt: any): boolean => {
-  const s = norm(txt);
-  const c = s.replace(/[^a-z]/g, '');
-  if (/^s+i+$/.test(c)) return true; // si, sii, siii, siiii...
-  if (['si', 'sip', 'sipi', 'simon', 'sale', 'va', 'dale', 'claro', 'obvio', 'correcto', 'afirmativo', 'exacto', 'porsupuesto', 'asies', 'sisi', 'siclaro'].includes(c)) return true;
-  return /\b(si|claro|obvio|correcto|afirmativo|sale|simon|por supuesto|asi es|tengo|si tengo|cuento con|puedo|ya la tengo|ya lo tengo)\b/.test(s);
-};
 
 const esNegativo = (txt: any): boolean => {
   const s = norm(txt);
   const c = s.replace(/[^a-z]/g, '');
   if (['no', 'nel', 'nop', 'nou', 'nain', 'nada', 'cero', 'ninguna', 'ninguno', 'ningun', 'nunca', 'jamas', 'negativo'].includes(c)) return true;
   return /\b(no|nel|nop|nunca|jamas|ninguna|ninguno|ningun|nada|negativo|no tengo|no cuento|no puedo)\b/.test(s);
+};
+
+const esAfirmativo = (txt: any): boolean => {
+  if (esNegativo(txt)) return false; // el "no" siempre gana (ej: "no tengo mi constancia")
+  const s = norm(txt);
+  const c = s.replace(/[^a-z]/g, '');
+  if (/^s+i+$/.test(c)) return true; // si, sii, siii, siiii...
+  if (['si', 'sip', 'sipi', 'simon', 'sale', 'va', 'dale', 'claro', 'obvio', 'correcto', 'afirmativo', 'exacto', 'porsupuesto', 'asies', 'sisi', 'siclaro'].includes(c)) return true;
+  return /\b(si|claro|obvio|correcto|afirmativo|sale|simon|por supuesto|asi es|tengo|si tengo|cuento con|puedo|ya la tengo|ya lo tengo)\b/.test(s);
 };
 
 // Afirmación "seca": dijo que sí pero sin dar detalle
@@ -127,7 +129,7 @@ const soloEntero = (txt: any): number | null => {
 const limpiarNombre = (t: any): string =>
   String(t).replace(/^\s*(hola,?\s*)?(me llamo|mi nombre es|soy)\s+/i, '').trim();
 
-/* ── IA SOLO de respaldo: extrae el valor de UN campo ── */
+/* ── IA SOLO de respaldo ── */
 async function iaExtrae(apiKey: string, campo: string, mensajeUsuario: string): Promise<any> {
   if (!apiKey) return null;
   const tipo = BOOL.has(campo) ? 'true o false' : (INT.has(campo) ? 'un número entero' : 'texto breve');
@@ -148,7 +150,6 @@ async function iaExtrae(apiKey: string, campo: string, mensajeUsuario: string): 
   } catch { return null; }
 }
 
-/* ── Extracción: primero código, IA solo si hace falta ── */
 async function extraer(apiKey: string, campo: string, mensajeUsuario: string): Promise<any> {
   if (campo === 'nombre_completo') return limpiarNombre(mensajeUsuario);
 
@@ -166,7 +167,7 @@ async function extraer(apiKey: string, campo: string, mensajeUsuario: string): P
     const ia = await iaExtrae(apiKey, campo, mensajeUsuario);
     if (ia === true || ia === 'true') return true;
     if (ia === false || ia === 'false') return false;
-    return false; // respaldo: no dejamos el campo vacío para no trabar la entrevista
+    return false;
   }
 
   if (INT.has(campo)) {
@@ -177,18 +178,15 @@ async function extraer(apiKey: string, campo: string, mensajeUsuario: string): P
     return isNaN(ni) ? 0 : ni;
   }
 
-  // Texto: guardamos lo que dijo el candidato
   return String(mensajeUsuario).trim();
 }
 
-/* ── Presentación de la vacante según CEDIS ── */
 function vacante(cedis: string | null): string {
   if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n• Matutino: 6am - 4pm\n• Vespertino: 1pm - 10pm\n• Nocturno: 10pm - 7am\n\n¿Te interesa? ¿Qué turno te gustaría?`;
   if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n• Matutino: 8am - 6pm\n• Vespertino: 11am - 10pm\n• Nocturno: 10pm - 6am\n\n¿Te interesa? ¿Qué turno te gustaría?`;
   return '¿Puedes trasladarte a Azcapotzalco, CDMX o a Cuautitlán Izcalli, Estado de México? ¿Qué turno te gustaría: matutino, vespertino o nocturno?';
 }
 
-/* ── Texto exacto de la próxima pregunta ── */
 function textoPregunta(campo: string, cedis: string | null): string {
   if (campo === 'turno_preferido') return vacante(cedis);
   if (campo === 'documentacion_completa_original') return TEXT_DOC;
@@ -201,7 +199,6 @@ function textoPregunta(campo: string, cedis: string | null): string {
   return PREGUNTAS[campo] || '¿Podrías contarme un poco más?';
 }
 
-/* ── Clasificador (idéntico al que ya tenías) ── */
 function clasificar(e: any): string {
   const vertigo = e.sufre_vertigo === true;
   const botas = e.tiene_botas_casquillo;
@@ -210,7 +207,7 @@ function clasificar(e: any): string {
   const edad = Number(e.edad);
 
   const esRechazo = vertigo || (botas === false && cedis === 'UPS');
-  const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('problema')
+  const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('aclaracion')
     || (botas === false && cedis !== 'UPS') || edad < 18 || edad > 55;
 
   return esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
@@ -234,7 +231,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   CAMPOS.forEach(c => { estado[c] = info?.[c] ?? null; });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
 
-  // Si ya sabemos que no hay dependientes, el apoyo no aplica
   if ((estado.dependientes_economicos === 0 || String(estado.dependientes_economicos) === '0') && estado.apoyo_cuidado_dependientes == null) {
     estado.apoyo_cuidado_dependientes = 'No aplica';
   }
@@ -258,19 +254,20 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(despedida, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
-  // Campo que estamos llenando ahora (primer nulo)
   const campoActual = CAMPOS.find(c => estado[c] == null) || null;
 
-  // 3) YA TERMINÓ -> clasificar + cierre
+  // 3) YA TERMINÓ -> cierre (sin repetirlo si ya se mandó)
   if (!campoActual) {
+    if (/registrado tu postulaci/i.test(ultimoBot)) {
+      return empaquetar('¡Con gusto! Que tengas excelente día 😊', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+    }
     const estatus = clasificar(estado);
-    const cierre = `Muchas gracias por tu tiempo, ${estado.nombre_completo || ''} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!`;
-    return empaquetar(cierre, {}, estatus, estado.vacante_cedis);
+    return empaquetar(cierreTexto(estado.nombre_completo), {}, estatus, estado.vacante_cedis);
   }
 
-  // 4) PROCESAR la respuesta a campoActual (con sus 2dos pasos)
+  // 4) PROCESAR la respuesta a campoActual (con sus pasos)
   const extraccion: any = {};
-  let seguimiento: string | null = null; // si != null: mandamos esto y NO avanzamos
+  let seguimiento: string | null = null;
   let preamble = '';
 
   if (SALUD_DETALLE.has(campoActual)) {
@@ -282,16 +279,16 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
       preamble = 'Gracias por compartirlo, lo tomo en cuenta. ';
       seguimiento = FU_CUALES;
     } else {
-      extraccion[campoActual] = String(mensajeUsuario).trim(); // dio el detalle directo
+      extraccion[campoActual] = String(mensajeUsuario).trim();
     }
   }
   else if (campoActual === 'tiene_botas_casquillo') {
     if (ultimoBot === FU_BOTAS) {
-      extraccion.tiene_botas_casquillo = false; // no las tiene todavía
+      extraccion.tiene_botas_casquillo = false;
     } else if (esAfirmativo(mensajeUsuario)) {
       extraccion.tiene_botas_casquillo = true;
     } else {
-      seguimiento = FU_BOTAS; // dijo que no -> le preguntamos si puede conseguirlas
+      seguimiento = FU_BOTAS;
     }
   }
   else if (campoActual === 'credito_infonavit_fonacot') {
@@ -303,13 +300,32 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
       extraccion.credito_infonavit_fonacot = 'No';
     }
   }
-  else if (campoActual === 'cuenta_banco_santander_problemas') {
-    if (ultimoBot === FU_BANCO2) {
-      extraccion.cuenta_banco_santander_problemas = String(mensajeUsuario).trim();
-    } else if (norm(mensajeUsuario).includes('santander')) {
-      extraccion.cuenta_banco_santander_problemas = 'Santander (sin problemas)';
+  else if (campoActual === 'referidos_familiares_nombres') {
+    if (ultimoBot === FU_REF_NOMBRE) {
+      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim(); // es el nombre
+    } else if (esNegativo(mensajeUsuario)) {
+      extraccion.referidos_familiares_nombres = 'Sin referido';
+    } else if (esSoloAfirmativo(mensajeUsuario)) {
+      seguimiento = FU_REF_NOMBRE; // dijo sí, pedir nombre
     } else {
-      seguimiento = FU_BANCO2; // banco distinto -> preguntamos por adeudos
+      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim(); // dio el nombre directo
+    }
+  }
+  else if (campoActual === 'cuenta_banco_santander_problemas') {
+    if (ultimoBot === FU_BANCO3) {
+      extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + String(mensajeUsuario).trim();
+    } else if (ultimoBot === FU_BANCO2) {
+      if (/adeudo|bloqueo|aclaracion/.test(norm(mensajeUsuario))) {
+        extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + String(mensajeUsuario).trim();
+      } else if (esAfirmativo(mensajeUsuario)) {
+        seguimiento = FU_BANCO3; // sí tuvo, preguntar cuál
+      } else {
+        extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
+      }
+    } else if (norm(mensajeUsuario).includes('santander')) {
+      extraccion.cuenta_banco_santander_problemas = 'Ya cuenta con Santander';
+    } else {
+      seguimiento = FU_BANCO2; // banco distinto, preguntar por adeudos
     }
   }
   else if (campoActual === 'dependientes_economicos') {
@@ -325,7 +341,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     extraccion[campoActual] = await extraer(apiKey, campoActual, mensajeUsuario);
   }
 
-  // 5) Si hay 2do paso, lo mandamos y NO avanzamos todavía
+  // 5) Si hay seguimiento, lo mandamos y NO avanzamos
   if (seguimiento) {
     return empaquetar(preamble + seguimiento, extraccion, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
@@ -340,7 +356,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
 
   const proximo = CAMPOS.find(c => estadoNuevo[c] == null) || null;
 
-  // Pequeños toques cálidos (opcionales)
   if (!preamble) {
     if (extraccion.nombre_completo) preamble = `¡Mucho gusto, ${extraccion.nombre_completo}! `;
     else if (campoActual === 'experiencia_almacen_meses' && estadoNuevo.experiencia_almacen_meses === 0) preamble = '¡No hay problema, todos empezamos algún día! 😊 ';
@@ -350,11 +365,10 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   // 7) ¿Terminó?
   if (!proximo) {
     const estatus = clasificar(estadoNuevo);
-    const cierre = `Muchas gracias por tu tiempo, ${estadoNuevo.nombre_completo || ''} 🙌 Ya registré toda tu información. Nuestro equipo de reclutamiento se pondrá en contacto contigo pronto. ¡Que tengas excelente día!`;
-    return empaquetar(cierre, extraccion, estatus, cedis);
+    return empaquetar(cierreTexto(estadoNuevo.nombre_completo), extraccion, estatus, cedis);
   }
 
-  // 8) Próxima pregunta (texto exacto, escrito por el código)
+  // 8) Próxima pregunta
   const pregunta = preamble + textoPregunta(proximo, cedis);
   return empaquetar(pregunta, extraccion, info?.estatus || 'Nuevo', cedis);
 };
