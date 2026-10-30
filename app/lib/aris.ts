@@ -1,9 +1,12 @@
 import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
-   ARIS · Cerebro de entrevista (30 pasos)
-   El CÓDIGO escribe cada pregunta. El sí/no lo entiende el código.
-   La IA solo es respaldo.
+   ARIS · Cerebro de entrevista
+   • El CÓDIGO escribe cada pregunta y controla el flujo.
+   • El sí/no y los números los entiende el código; la IA ayuda
+     en los casos raros.
+   • REGLA NUEVA: si no se entiende una respuesta válida, ARIS
+     VUELVE A PREGUNTAR (no guarda valores inventados).
    ══════════════════════════════════════════════════════════════ */
 
 const CAMPOS = [
@@ -26,13 +29,13 @@ const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
   zona_vivienda: '¿En qué zona vives?',
   estado_civil: '¿Cuál es tu estado civil?',
-  dependientes_economicos: '¿Tienes dependientes económicos a tu cargo? ¿Cuántos?',
+  dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
   tiempo_traslado_minutos: '¿Cuánto tiempo te tomaría trasladarte al almacén, en minutos aproximadamente?',
   inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?',
   experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén? (Si no tienes, dime "ninguna")',
-  areas_desempenadas: '¿En qué áreas te has desempeñado anteriormente?',
+  areas_desempenadas: '¿En qué áreas o trabajos te has desempeñado? (Si es tu primer empleo, dime "ninguno")',
   motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
   tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
   nivel_salud_percecion: '¿Cómo calificarías tu estado de salud del 1 al 10, siendo 10 excelente?',
@@ -49,12 +52,14 @@ const PREGUNTAS: Record<string, string> = {
   referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió?',
 };
 
-// Textos de seguimiento (2do/3er paso). El código los manda TAL CUAL.
+// Textos de seguimiento (el código los manda TAL CUAL).
 const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
 const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
+const FU_DEP_CUANTOS  = '¿Cuántos dependientes económicos tienes a tu cargo?';
 const FU_CUAL_CREDITO = '¿Cuál de los dos: Infonavit o Fonacot?';
 const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
 const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es su nombre completo?';
+const FU_DOC          = 'Sin problema 😊 ¿Puedes conseguir o completar lo que te falta antes de ingresar?';
 const Q_BANCO1        = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
 const FU_BANCO2       = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
 const FU_BANCO3       = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
@@ -81,7 +86,7 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 const cierreTexto = (nombre: any): string =>
   `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
 
-/* ── Normalizadores robustos de SÍ / NO ── */
+/* ── Normalizadores de SÍ / NO ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
 const esNegativo = (txt: any): boolean => {
@@ -92,15 +97,14 @@ const esNegativo = (txt: any): boolean => {
 };
 
 const esAfirmativo = (txt: any): boolean => {
-  if (esNegativo(txt)) return false; // el "no" siempre gana (ej: "no tengo mi constancia")
+  if (esNegativo(txt)) return false; // el "no" siempre gana
   const s = norm(txt);
   const c = s.replace(/[^a-z]/g, '');
-  if (/^s+i+$/.test(c)) return true; // si, sii, siii, siiii...
+  if (/^s+i+$/.test(c)) return true;
   if (['si', 'sip', 'sipi', 'simon', 'sale', 'va', 'dale', 'claro', 'obvio', 'correcto', 'afirmativo', 'exacto', 'porsupuesto', 'asies', 'sisi', 'siclaro'].includes(c)) return true;
   return /\b(si|claro|obvio|correcto|afirmativo|sale|simon|por supuesto|asi es|tengo|si tengo|cuento con|puedo|ya la tengo|ya lo tengo)\b/.test(s);
 };
 
-// Afirmación "seca": dijo que sí pero sin dar detalle
 const esSoloAfirmativo = (txt: any): boolean => {
   if (!esAfirmativo(txt)) return false;
   const resto = norm(txt)
@@ -121,6 +125,14 @@ const detectarCedis = (txt: any): string | null => {
   return null;
 };
 
+const detectarTurno = (txt: any): string | null => {
+  const s = norm(txt);
+  if (/matut|manana|maniana|6am|8am/.test(s)) return 'Matutino';
+  if (/vesper|tarde|1pm|11am/.test(s)) return 'Vespertino';
+  if (/noct|noche|10pm/.test(s)) return 'Nocturno';
+  return null;
+};
+
 const soloEntero = (txt: any): number | null => {
   const s = norm(txt);
   if (/ningun|nada|cero|sin experiencia|^no$/.test(s)) return 0;
@@ -131,7 +143,7 @@ const soloEntero = (txt: any): number | null => {
 const limpiarNombre = (t: any): string =>
   String(t).replace(/^\s*(hola,?\s*)?(me llamo|mi nombre es|soy)\s+/i, '').trim();
 
-/* ── IA SOLO de respaldo ── */
+/* ── IA de apoyo (casos raros) ── */
 async function iaExtrae(apiKey: string, campo: string, mensajeUsuario: string): Promise<any> {
   if (!apiKey) return null;
   const tipo = BOOL.has(campo) ? 'true o false' : (INT.has(campo) ? 'un número entero' : 'texto breve');
@@ -152,35 +164,73 @@ async function iaExtrae(apiKey: string, campo: string, mensajeUsuario: string): 
   } catch { return null; }
 }
 
-async function extraer(apiKey: string, campo: string, mensajeUsuario: string): Promise<any> {
-  if (campo === 'nombre_completo') return limpiarNombre(mensajeUsuario);
+async function iaTurno(apiKey: string, mensajeUsuario: string): Promise<string | null> {
+  if (!apiKey) return null;
+  const sys = `El candidato eligió un turno de trabajo. Responde SOLO JSON {"valor": X} donde X es "Matutino", "Vespertino", "Nocturno" o null si no lo menciona.`;
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini', temperature: 0, response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: String(mensajeUsuario) }]
+      })
+    });
+    const d = await r.json();
+    const t = d?.choices?.[0]?.message?.content;
+    if (!t) return null;
+    const v = JSON.parse(t)?.valor;
+    return ['Matutino', 'Vespertino', 'Nocturno'].includes(v) ? v : null;
+  } catch { return null; }
+}
 
-  if (campo === 'turno_preferido') {
-    const s = norm(mensajeUsuario);
-    if (/matut|manana|maniana|6am|8am/.test(s)) return 'Matutino';
-    if (/vesper|tarde|1pm|11am/.test(s)) return 'Vespertino';
-    if (/noct|noche|10pm/.test(s)) return 'Nocturno';
-    return String(mensajeUsuario).trim();
+/* ── Procesa un campo simple: devuelve {valor} o {reask} ── */
+async function procesarCampo(apiKey: string, campo: string, msg: any): Promise<{ valor?: any, reask?: string }> {
+  const texto = String(msg).trim();
+
+  if (campo === 'nombre_completo') {
+    const nom = limpiarNombre(msg);
+    if (nom.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ]/g, '').length < 2) return { reask: 'Perdona, no te entendí. ¿Me compartes tu nombre completo? 🙏' };
+    return { valor: nom };
   }
 
-  if (BOOL.has(campo)) {
-    if (esAfirmativo(mensajeUsuario)) return true;
-    if (esNegativo(mensajeUsuario)) return false;
-    const ia = await iaExtrae(apiKey, campo, mensajeUsuario);
-    if (ia === true || ia === 'true') return true;
-    if (ia === false || ia === 'false') return false;
-    return false;
+  if (campo === 'turno_preferido') {
+    const t = detectarTurno(msg) || await iaTurno(apiKey, msg);
+    if (!t) return { reask: '¿Qué turno te gustaría: matutino, vespertino o nocturno?' };
+    return { valor: t };
   }
 
   if (INT.has(campo)) {
-    const n = soloEntero(mensajeUsuario);
-    if (n !== null) return n;
-    const ia = await iaExtrae(apiKey, campo, mensajeUsuario);
-    const ni = typeof ia === 'number' ? ia : parseInt(String(ia), 10);
-    return isNaN(ni) ? 0 : ni;
+    let n = soloEntero(msg);
+    if (n === null) {
+      const ia = await iaExtrae(apiKey, campo, msg);
+      if (typeof ia === 'number') n = ia;
+      else if (ia != null && !isNaN(parseInt(String(ia), 10))) n = parseInt(String(ia), 10);
+    }
+    if (campo === 'edad') {
+      if (n === null || n < 15 || n > 70) return { reask: 'Necesito tu edad en número, por favor. Por ejemplo: 25' };
+    } else if (campo === 'nivel_salud_percecion') {
+      if (n === null || n < 1 || n > 10) return { reask: 'Del 1 al 10, ¿qué número le das a tu estado de salud?' };
+    } else if (campo === 'tiempo_traslado_minutos') {
+      if (n === null || n < 0) return { reask: '¿Cuántos minutos te tomaría llegar, aproximadamente? Dame un número.' };
+    } else {
+      if (n === null) n = 0; // experiencia: si no dice número, 0
+    }
+    return { valor: n };
   }
 
-  return String(mensajeUsuario).trim();
+  if (BOOL.has(campo)) {
+    if (esAfirmativo(msg)) return { valor: true };
+    if (esNegativo(msg)) return { valor: false };
+    const ia = await iaExtrae(apiKey, campo, msg);
+    if (ia === true || ia === 'true') return { valor: true };
+    if (ia === false || ia === 'false') return { valor: false };
+    return { reask: 'Perdona, ¿me confirmas con un sí o un no? 🙏' };
+  }
+
+  // texto libre
+  if (!texto) return { reask: '¿Me lo confirmas, por favor?' };
+  return { valor: texto };
 }
 
 function vacante(cedis: string | null): string {
@@ -259,7 +309,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
 
   const campoActual = CAMPOS.find(c => estado[c] == null) || null;
 
-  // 3) YA TERMINÓ -> cierre (sin repetirlo si ya se mandó)
+  // 3) YA TERMINÓ -> cierre (sin repetirlo)
   if (!campoActual) {
     if (/registrado tu postulaci/i.test(ultimoBot)) {
       return empaquetar('¡Con gusto! Que tengas excelente día 😊', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
@@ -268,7 +318,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(cierreTexto(estado.nombre_completo), {}, estatus, estado.vacante_cedis);
   }
 
-  // 4) PROCESAR la respuesta a campoActual (con sus pasos)
+  // 4) PROCESAR respuesta
   const extraccion: any = {};
   let seguimiento: string | null = null;
   let preamble = '';
@@ -285,6 +335,20 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
       extraccion[campoActual] = String(mensajeUsuario).trim();
     }
   }
+  else if (campoActual === 'dependientes_economicos') {
+    if (ultimoBot === FU_DEP_CUANTOS) {
+      const n = soloEntero(mensajeUsuario);
+      if (n === null) seguimiento = FU_DEP_CUANTOS; // repetir hasta número
+      else { extraccion.dependientes_economicos = n; if (n === 0) extraccion.apoyo_cuidado_dependientes = 'No aplica'; }
+    } else if (esNegativo(mensajeUsuario) || soloEntero(mensajeUsuario) === 0) {
+      extraccion.dependientes_economicos = 0;
+      extraccion.apoyo_cuidado_dependientes = 'No aplica';
+    } else {
+      const n = soloEntero(mensajeUsuario);
+      if (n !== null) extraccion.dependientes_economicos = n;
+      else seguimiento = FU_DEP_CUANTOS; // dijo "sí" sin número -> preguntar cuántos
+    }
+  }
   else if (campoActual === 'tiene_botas_casquillo') {
     if (ultimoBot === FU_BOTAS) {
       extraccion.tiene_botas_casquillo = false;
@@ -296,25 +360,43 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   }
   else if (campoActual === 'credito_infonavit_fonacot') {
     if (ultimoBot === FU_INFONAVIT) {
-      // El ultimoUser fue cuál crédito (Infonavit/Fonacot); este mensaje es la hoja
       extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${String(mensajeUsuario).trim()}`;
     } else if (ultimoBot === FU_CUAL_CREDITO) {
-      seguimiento = FU_INFONAVIT; // ya dijo cuál, ahora pedir la hoja
+      seguimiento = FU_INFONAVIT;
     } else if (esAfirmativo(mensajeUsuario) && !esNegativo(mensajeUsuario)) {
-      seguimiento = FU_CUAL_CREDITO; // dijo sí, preguntar cuál de los dos
+      seguimiento = FU_CUAL_CREDITO;
     } else {
       extraccion.credito_infonavit_fonacot = 'No';
     }
   }
+  else if (campoActual === 'documentacion_completa_original') {
+    if (ultimoBot === FU_DOC) {
+      extraccion.documentacion_completa_original = esAfirmativo(mensajeUsuario); // true si puede completarla
+      preamble = '¡Perfecto! Lo registramos. ';
+    } else if (esAfirmativo(mensajeUsuario) && !esNegativo(mensajeUsuario)) {
+      extraccion.documentacion_completa_original = true;
+    } else {
+      seguimiento = FU_DOC; // le falta algo -> ¿puede conseguirlo?
+    }
+  }
+  else if (campoActual === 'areas_desempenadas') {
+    const s = norm(mensajeUsuario);
+    if (esNegativo(mensajeUsuario) || /ningun|primer empleo|sin experiencia|nunca he trabajado|no he trabajado/.test(s)) {
+      extraccion.areas_desempenadas = 'Sin experiencia previa';
+      extraccion.motivo_salida_anterior = 'Sin empleo anterior'; // se salta la de motivo
+    } else {
+      extraccion.areas_desempenadas = String(mensajeUsuario).trim();
+    }
+  }
   else if (campoActual === 'referidos_familiares_nombres') {
     if (ultimoBot === FU_REF_NOMBRE) {
-      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim(); // es el nombre
+      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim();
     } else if (esNegativo(mensajeUsuario)) {
       extraccion.referidos_familiares_nombres = 'Sin referido';
     } else if (esSoloAfirmativo(mensajeUsuario)) {
-      seguimiento = FU_REF_NOMBRE; // dijo sí, pedir nombre
+      seguimiento = FU_REF_NOMBRE;
     } else {
-      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim(); // dio el nombre directo
+      extraccion.referidos_familiares_nombres = String(mensajeUsuario).trim();
     }
   }
   else if (campoActual === 'cuenta_banco_santander_problemas') {
@@ -324,30 +406,24 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
       if (/adeudo|bloqueo|aclaracion/.test(norm(mensajeUsuario))) {
         extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + String(mensajeUsuario).trim();
       } else if (esAfirmativo(mensajeUsuario)) {
-        seguimiento = FU_BANCO3; // sí tuvo, preguntar cuál
+        seguimiento = FU_BANCO3;
       } else {
         extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
       }
     } else if (norm(mensajeUsuario).includes('santander')) {
       extraccion.cuenta_banco_santander_problemas = 'Ya cuenta con Santander';
     } else {
-      seguimiento = FU_BANCO2; // banco distinto, preguntar por adeudos
-    }
-  }
-  else if (campoActual === 'dependientes_economicos') {
-    if (esNegativo(mensajeUsuario) || soloEntero(mensajeUsuario) === 0) {
-      extraccion.dependientes_economicos = 0;
-      extraccion.apoyo_cuidado_dependientes = 'No aplica';
-    } else {
-      const n = soloEntero(mensajeUsuario);
-      extraccion.dependientes_economicos = n === null ? 1 : n;
+      seguimiento = FU_BANCO2;
     }
   }
   else {
-    extraccion[campoActual] = await extraer(apiKey, campoActual, mensajeUsuario);
+    // Campos simples con validación + re-pregunta
+    const r = await procesarCampo(apiKey, campoActual, mensajeUsuario);
+    if (r.reask) seguimiento = r.reask;
+    else extraccion[campoActual] = r.valor;
   }
 
-  // 5) Si hay seguimiento, lo mandamos y NO avanzamos
+  // 5) Si hay seguimiento/re-pregunta, lo mandamos y NO avanzamos
   if (seguimiento) {
     return empaquetar(preamble + seguimiento, extraccion, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
