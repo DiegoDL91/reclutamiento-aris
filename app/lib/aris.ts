@@ -132,7 +132,7 @@ El candidato puede responder con faltas de ortografía, abreviaturas, de forma i
 }
 Reglas:
 - "si_no": solo si la respuesta es claramente afirmativa o negativa a lo que se le preguntó.
-- "numero": extrae la cantidad si mencionó una (edad, minutos, cuántos dependientes, etc.).
+- "numero": extrae la cantidad si mencionó una.
 - "turno": solo si eligió un turno de trabajo.
 - "intencion":"corregir" SOLO si pide explícitamente cambiar un dato que ya había dado (ej. "me equivoqué, mi edad es 25"). Si solo está respondiendo la pregunta actual, usa "responder".
 - "intencion":"salir" si ya no le interesa la vacante.
@@ -271,12 +271,15 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(cierreTexto(estado.nombre_completo), {}, estatus, estado.vacante_cedis);
   }
 
-  // CORRECCIÓN: triple candado — la IA lo pide, el mensaje lo dice, y el dato ya existía
-  const pareceCorreccion = /\b(me equivoqu|equivoque|corrig|cambia|cambie|esta mal|en realidad|queria decir|quise decir|perdon)\b/.test(norm(mensajeUsuario));
+  // CORRECCIÓN
+  const pareceCorreccion = /\b(me equivoqu|equivoque|corrig|cambia|cambie|esta mal|en realidad|queria decir|quise decir)\b/.test(norm(mensajeUsuario));
   if (I.intencion === 'corregir' && pareceCorreccion && I.correccion_campo && I.correccion_valor != null && estado[I.correccion_campo] != null && I.correccion_campo !== campoActual) {
     const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
     const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, estado.vacante_cedis);
     return empaquetar(`Listo, ya lo corregí 👍\n\n${q}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+  }
+  if (I.intencion === 'corregir' && pareceCorreccion) {
+    return empaquetar('Claro, con gusto lo corrijo. ¿Qué dato quieres cambiar? Dime por ejemplo: "mi edad es 25" o "mi turno es matutino". 🙂', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
   const extraccion: any = {};
@@ -319,8 +322,11 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else seguimiento = FU_BOTAS;
   }
   else if (campoActual === 'credito_infonavit_fonacot') {
+    const dice = norm(I.texto) + ' ' + norm(mensajeUsuario);
+    const cualDicho = /infonavit/.test(dice) ? 'Infonavit' : (/fonacot/.test(dice) ? 'Fonacot' : null);
     if (ultimoBot === FU_INFONAVIT) extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${I.texto}`;
     else if (ultimoBot === FU_CUAL_CREDITO) seguimiento = FU_INFONAVIT;
+    else if (cualDicho) seguimiento = FU_INFONAVIT; // ya dijo cuál de una vez
     else if (I.si_no === 'si') seguimiento = FU_CUAL_CREDITO;
     else extraccion.credito_infonavit_fonacot = 'No';
   }
@@ -330,7 +336,11 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else seguimiento = FU_DOC;
   }
   else if (campoActual === 'referidos_familiares_nombres') {
-    if (ultimoBot === FU_REF_NOMBRE) extraccion.referidos_familiares_nombres = I.texto;
+    if (ultimoBot === FU_REF_NOMBRE) {
+      const nom = (I.texto || '').trim();
+      if (nom.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ]/g, '').length < 2) seguimiento = '¿Me compartes el nombre completo de quien te refirió? 🙏';
+      else extraccion.referidos_familiares_nombres = nom;
+    }
     else if (I.si_no === 'no') extraccion.referidos_familiares_nombres = 'Sin referido';
     else if (I.si_no === 'si' && esSoloAfirmativo(mensajeUsuario)) seguimiento = FU_REF_NOMBRE;
     else extraccion.referidos_familiares_nombres = I.texto;
