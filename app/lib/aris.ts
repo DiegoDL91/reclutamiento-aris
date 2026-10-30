@@ -2,9 +2,6 @@ import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
    ARIS · Cerebro de entrevista — PLAN B (IA interpreta, código controla)
-   • Cada mensaje lo INTERPRETA la IA (typos, informal, correcciones).
-   • El CÓDIGO manda el flujo, los textos exactos y la clasificación.
-   • Si la IA falla o no hay saldo → red de respaldo con reglas.
    ══════════════════════════════════════════════════════════════ */
 
 const CAMPOS = [
@@ -25,6 +22,7 @@ const SALUD_DETALLE = new Set(['enfermedades_cronicas', 'lesiones_o_cirugias', '
 
 const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
+  zona_vivienda: '¿En qué zona vives?',
   estado_civil: '¿Cuál es tu estado civil?',
   dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
@@ -83,9 +81,8 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 const cierreTexto = (nombre: any): string =>
   `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
 
-/* ── Helpers de respaldo (si la IA falla) ── */
+/* ── Helpers de respaldo ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
 const esNegativo = (txt: any): boolean => {
   const s = norm(txt); const c = s.replace(/[^a-z]/g, '');
   if (['no','nel','nop','nou','nain','nada','cero','ninguna','ninguno','ningun','inguno','nunca','jamas','negativo'].includes(c)) return true;
@@ -117,13 +114,10 @@ async function interpretar(apiKey: string, preguntaActual: string, historialReci
   const fallback: Interp = {
     intencion: quiereSalir(msg) ? 'salir' : 'responder',
     si_no: esAfirmativo(msg) ? 'si' : (esNegativo(msg) ? 'no' : null),
-    numero: soloEntero(msg),
-    turno: detectarTurno(msg),
-    texto: String(msg).trim(),
+    numero: soloEntero(msg), turno: detectarTurno(msg), texto: String(msg).trim(),
     correccion_campo: null, correccion_valor: null
   };
   if (!apiKey) return fallback;
-
   const sys = `Eres el intérprete de una entrevista de reclutamiento por WhatsApp para Rio Logística.
 ARIS acaba de preguntar: "${preguntaActual}".
 El candidato puede responder con faltas de ortografía, abreviaturas, de forma informal o en pedazos. Interpreta su mensaje y responde SOLO con este JSON:
@@ -140,10 +134,9 @@ Reglas:
 - "si_no": solo si la respuesta es claramente afirmativa o negativa a lo que se le preguntó.
 - "numero": extrae la cantidad si mencionó una (edad, minutos, cuántos dependientes, etc.).
 - "turno": solo si eligió un turno de trabajo.
-- "intencion":"corregir" SOLO si pide claramente cambiar un dato que ya había dado (indica el campo y el nuevo valor).
+- "intencion":"corregir" SOLO si pide explícitamente cambiar un dato que ya había dado (ej. "me equivoqué, mi edad es 25"). Si solo está respondiendo la pregunta actual, usa "responder".
 - "intencion":"salir" si ya no le interesa la vacante.
 - Nunca inventes datos que el candidato no haya dado.`;
-
   try {
     const mensajes = [{ role: 'system', content: sys }, ...historialReciente, { role: 'user', content: String(msg) }];
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -166,17 +159,13 @@ Reglas:
   } catch { return fallback; }
 }
 
-/* ── Campos simples (usa la interpretación, sin más llamadas) ── */
 function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, reask?: string } {
   if (campo === 'nombre_completo') {
     const nom = limpiarNombre(I.texto || msgRaw);
     if (nom.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ]/g, '').length < 2) return { reask: 'Perdona, no te entendí. ¿Me compartes tu nombre completo? 🙏' };
     return { valor: nom };
   }
-  if (campo === 'turno_preferido') {
-    if (I.turno) return { valor: I.turno };
-    return { reask: '¿Qué turno te gustaría: matutino, vespertino o nocturno?' };
-  }
+  if (campo === 'turno_preferido') { if (I.turno) return { valor: I.turno }; return { reask: '¿Qué turno te gustaría: matutino, vespertino o nocturno?' }; }
   if (campo === 'escolaridad_comprobable') {
     if (I.si_no === 'no' && I.numero === null) return { valor: 'Sin escolaridad comprobable' };
     return { valor: I.texto || String(msgRaw).trim() };
@@ -190,9 +179,7 @@ function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, r
       if (n === null || n < 1 || n > 10) return { reask: 'Del 1 al 10, ¿qué número le das a tu estado de salud?' };
     } else if (campo === 'tiempo_traslado_minutos') {
       if (n === null || n < 0) return { reask: '¿Cuántos minutos te tomaría llegar, aproximadamente? Dame un número.' };
-    } else {
-      return { valor: n === null ? 0 : n };
-    }
+    } else { return { valor: n === null ? 0 : n }; }
     return { valor: n };
   }
   if (BOOL.has(campo)) {
@@ -262,16 +249,13 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
 
   const yaSaludo = historial.some(m => m.role === 'assistant');
 
-  // 1) PRIMER CONTACTO (sin IA)
   if (!yaSaludo) {
     const saludo = '¡Hola! 👋 Soy A.R.I.S., el sistema de inteligencia artificial de reclutamiento de Rio Logística.\n\nEstoy aquí para acompañarte en tu proceso de selección de forma rápida y personalizada 🚀\n\n¿Cuál es tu nombre completo?';
     return empaquetar(saludo, {}, 'Nuevo', estado.vacante_cedis);
   }
 
-  // 2) INTERPRETAR el mensaje con la IA
   const I = await interpretar(apiKey, ultimoBot, historial.slice(-6), mensajeUsuario);
 
-  // 3) SALIDA
   if (I.intencion === 'salir') {
     const despedida = 'Sin problema, fue un gusto. Si en el futuro te interesa, aquí estaremos. ¡Que tengas excelente día! 😊';
     return empaquetar(despedida, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
@@ -279,7 +263,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
 
   const campoActual = CAMPOS.find(c => estado[c] == null) || null;
 
-  // 4) YA TERMINÓ -> cierre
   if (!campoActual) {
     if (/registrado tu postulaci/i.test(ultimoBot)) {
       return empaquetar('¡Con gusto! Que tengas excelente día 😊', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
@@ -288,14 +271,14 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(cierreTexto(estado.nombre_completo), {}, estatus, estado.vacante_cedis);
   }
 
-  // 5) CORRECCIÓN de un dato previo
-  if (I.intencion === 'corregir' && I.correccion_campo && I.correccion_valor != null) {
+  // CORRECCIÓN: triple candado — la IA lo pide, el mensaje lo dice, y el dato ya existía
+  const pareceCorreccion = /\b(me equivoqu|equivoque|corrig|cambia|cambie|esta mal|en realidad|queria decir|quise decir|perdon)\b/.test(norm(mensajeUsuario));
+  if (I.intencion === 'corregir' && pareceCorreccion && I.correccion_campo && I.correccion_valor != null && estado[I.correccion_campo] != null && I.correccion_campo !== campoActual) {
     const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
-    const reask = `Listo, ya lo corregí 👍\n\n${ultimoBot || textoPregunta(campoActual, estado.vacante_cedis)}`;
-    return empaquetar(reask, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+    const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, estado.vacante_cedis);
+    return empaquetar(`Listo, ya lo corregí 👍\n\n${q}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
-  // 6) PROCESAR el campo actual
   const extraccion: any = {};
   let seguimiento: string | null = null;
   let preamble = '';
@@ -367,12 +350,10 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else extraccion[campoActual] = r.valor;
   }
 
-  // 7) Si hay seguimiento/re-pregunta
   if (seguimiento) {
     return empaquetar(preamble + seguimiento, extraccion, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
-  // 8) Estado nuevo + CEDIS + próxima pregunta
   const estadoNuevo: any = { ...estado, ...extraccion };
   if (estadoNuevo.dependientes_economicos === 0 && estadoNuevo.apoyo_cuidado_dependientes == null) estadoNuevo.apoyo_cuidado_dependientes = 'No aplica';
   const cedis = estadoNuevo.vacante_cedis || detectarCedis(estadoNuevo.zona_vivienda) || detectarCedis(mensajeUsuario) || null;
