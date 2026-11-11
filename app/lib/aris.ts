@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
-   ARIS · Cerebro de entrevista — PLAN B (IA interpreta, código controla)
+   ARIS · Cerebro de entrevista — PLAN B
    ══════════════════════════════════════════════════════════════ */
 
 const CAMPOS = [
@@ -22,6 +22,7 @@ const SALUD_DETALLE = new Set(['enfermedades_cronicas', 'lesiones_o_cirugias', '
 
 const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
+  zona_vivienda: '¿En qué zona vives?',
   estado_civil: '¿Cuál es tu estado civil?\n1️⃣ Soltero(a)   2️⃣ Casado(a)   3️⃣ Unión libre   4️⃣ Otro\n\nResponde con el número 👇',
   dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
@@ -86,12 +87,12 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 const cierreTexto = (nombre: any): string =>
   `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
 
-/* ── Helpers de respaldo ── */
+/* ── Helpers ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 const esNegativo = (txt: any): boolean => {
   const s = norm(txt); const c = s.replace(/[^a-z]/g, '');
   if (['no','nel','nop','nou','nain','nada','cero','ninguna','ninguno','ningun','inguno','nunca','jamas','negativo'].includes(c)) return true;
-  return /\b(no|nel|nop|nunca|jamas|ninguna|ninguno|ningun|nada|negativo|no tengo|no cuento|no puedo)\b/.test(s);
+  return /\b(no|nel|nop|nunca|jamas|ninguna|ninguno|ningun|nada|negativo|no tengo|no cuento|no puedo|no he tenido|sin problema|sin incidencia)\b/.test(s);
 };
 const esAfirmativo = (txt: any): boolean => {
   if (esNegativo(txt)) return false;
@@ -110,7 +111,7 @@ const pareceSalida = (txt: any): boolean => { const s = norm(txt); if (['adios',
 const pareceCorreccion = (txt: any): boolean => /\b(me equivoqu|equivoque|corrig|quise decir|queria decir)\b/.test(norm(txt));
 const declinaZona = (txt: any): boolean => { const s = norm(txt); return esNegativo(txt) || /ningun|no puedo ir|no me queda|ninguna de las dos|a ninguna/.test(s); };
 const detectarCedis = (txt: any): string | null => { const z = norm(txt); if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial'; if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla|coatitlan/.test(z)) return 'UPS'; return null; };
-const detectarTurno = (txt: any): string | null => { const s = norm(txt); if (/matut|manana|maniana|6am|8am/.test(s)) return 'Matutino'; if (/vesper|tarde|1pm|11am/.test(s)) return 'Vespertino'; if (/noct|noche|10pm/.test(s)) return 'Nocturno'; return null; };
+const detectarTurno = (txt: any): string | null => { const s = norm(txt); if (/matut|manana|maniana|6am|7am|8am/.test(s)) return 'Matutino'; if (/vesper|tarde|1pm|11am/.test(s)) return 'Vespertino'; if (/noct|noche|10pm/.test(s)) return 'Nocturno'; return null; };
 const soloEntero = (txt: any): number | null => { const s = norm(txt); if (/ningun|nada|cero|sin experiencia|^no$/.test(s)) return 0; const m = s.match(/\d+/); return m ? parseInt(m[0],10) : null; };
 const soloDigito = (txt: any): number | null => { const m = norm(txt).match(/\d+/); return m ? parseInt(m[0],10) : null; };
 const limpiarNombre = (t: any): string => String(t).replace(/^\s*(hola,?\s*)?(me llamo|mi nombre es|soy)\s+/i, '').trim();
@@ -139,11 +140,11 @@ El candidato puede responder con faltas de ortografía, abreviaturas, de forma i
  "correccion_valor": null | <valor nuevo>
 }
 Reglas:
-- "si_no": solo si la respuesta es claramente afirmativa o negativa a lo que se le preguntó.
+- "si_no": solo si la respuesta es claramente afirmativa o negativa a lo que se le preguntó. Un "No" a "¿has tenido algún problema?" es "no".
 - "numero": extrae la cantidad o el número de opción si mencionó uno.
 - "turno": solo si eligió un turno de trabajo.
 - Si el candidato dice qué dato quiere cambiar y a qué valor (ej. "mi edad es 25"), pon "correccion_campo" y "correccion_valor".
-- Nunca inventes datos que el candidato no haya dado.`;
+- Nunca inventes datos que el candidato no haya dado, ni repitas las palabras de la pregunta en "texto".`;
   try {
     const mensajes = [{ role: 'system', content: sys }, ...historialReciente, { role: 'user', content: String(msg) }];
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -203,8 +204,8 @@ function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, r
 }
 
 function vacante(cedis: string | null): string {
-  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (6am - 4pm)\n2️⃣ Vespertino (1pm - 10pm)\n3️⃣ Nocturno (10pm - 7am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
-  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (8am - 6pm)\n2️⃣ Vespertino (11am - 10pm)\n3️⃣ Nocturno (10pm - 6am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
+  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (7am - 4pm)\n2️⃣ Vespertino (1pm - 10pm)\n3️⃣ Nocturno (10pm - 7am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
+  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $295 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (8am - 6pm)\n2️⃣ Vespertino (11am - 10pm)\n3️⃣ Nocturno (10pm - 6am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
   return Q_UBICACION;
 }
 
@@ -227,7 +228,7 @@ function clasificar(e: any): string {
   const banco = norm(e.cuenta_banco_santander_problemas);
   const edad = Number(e.edad);
   const esRechazo = vertigo || (botas === false && cedis === 'UPS') || (edad && edad < 18);
-  const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('aclaracion')
+  const esPendiente = banco.includes('problema con santander') || banco.includes('adeudo') || banco.includes('bloqueo')
     || (botas === false && cedis !== 'UPS') || (edad && edad > 45);
   return esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
 }
@@ -264,7 +265,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(saludo, {}, 'Nuevo', estado.vacante_cedis);
   }
 
-  // MENOR DE EDAD: ya registrada y <18 -> no se continúa
   if (estado.edad != null && Number(estado.edad) < 18) {
     return empaquetar(CIERRE_MENOR, {}, 'Rechazado', estado.vacante_cedis);
   }
@@ -363,8 +363,8 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else seguimiento = FU_BOTAS;
   }
   else if (campoActual === 'credito_infonavit_fonacot') {
-    const dice = norm(I.texto) + ' ' + norm(mensajeUsuario);
-    const cualDicho = /infonavit/.test(dice) ? 'Infonavit' : (/fonacot/.test(dice) ? 'Fonacot' : null);
+    const dicho = norm(mensajeUsuario);
+    const cualDicho = /infonavit/.test(dicho) ? 'Infonavit' : (/fonacot/.test(dicho) ? 'Fonacot' : null);
     if (ultimoBot === FU_INFONAVIT) extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${I.texto}`;
     else if (ultimoBot === FU_CUAL_CREDITO) seguimiento = FU_INFONAVIT;
     else if (cualDicho) seguimiento = FU_INFONAVIT;
@@ -387,12 +387,14 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else extraccion.referidos_familiares_nombres = I.texto;
   }
   else if (campoActual === 'cuenta_banco_santander_problemas') {
+    const dicho = norm(mensajeUsuario);
     if (ultimoBot === FU_BANCO3) extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + I.texto;
     else if (ultimoBot === FU_BANCO2) {
-      if (/adeudo|bloqueo|aclaracion/.test(norm(mensajeUsuario)) || /adeudo|bloqueo|aclaracion/.test(norm(I.texto))) extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + I.texto;
+      if (esNegativo(mensajeUsuario)) extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
+      else if (/adeudo|bloqueo|aclaracion/.test(dicho)) extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + I.texto;
       else if (I.si_no === 'si') seguimiento = FU_BANCO3;
       else extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
-    } else if (norm(I.texto).includes('santander') || norm(mensajeUsuario).includes('santander')) extraccion.cuenta_banco_santander_problemas = 'Ya cuenta con Santander';
+    } else if (dicho.includes('santander')) extraccion.cuenta_banco_santander_problemas = 'Ya cuenta con Santander';
     else seguimiento = FU_BANCO2;
   }
   else {
