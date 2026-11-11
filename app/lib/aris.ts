@@ -22,13 +22,12 @@ const SALUD_DETALLE = new Set(['enfermedades_cronicas', 'lesiones_o_cirugias', '
 
 const PREGUNTAS: Record<string, string> = {
   edad: '¿Cuántos años tienes?',
-  zona_vivienda: '¿En qué zona vives?',
-  estado_civil: '¿Cuál es tu estado civil?',
+  estado_civil: '¿Cuál es tu estado civil?\n1️⃣ Soltero(a)   2️⃣ Casado(a)   3️⃣ Unión libre   4️⃣ Otro\n\nResponde con el número 👇',
   dependientes_economicos: '¿Tienes dependientes económicos a tu cargo?',
   apoyo_cuidado_dependientes: '¿Cuentas con apoyo para el cuidado de tus dependientes mientras trabajas?',
   tiempo_traslado_minutos: '¿Cuánto tiempo te tomaría trasladarte al almacén, en minutos aproximadamente?',
   inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
-  escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?',
+  escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?\n1️⃣ Primaria   2️⃣ Secundaria   3️⃣ Preparatoria   4️⃣ Universidad   5️⃣ Otro\n\nResponde con el número 👇',
   experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén? (Si no tienes, dime "ninguna")',
   areas_desempenadas: '¿En qué áreas o trabajos te has desempeñado? (Si es tu primer empleo, dime "ninguno")',
   motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
@@ -47,7 +46,7 @@ const PREGUNTAS: Record<string, string> = {
   referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió?',
 };
 
-const Q_UBICACION     = 'Trabajamos en dos ubicaciones: Azcapotzalco (CDMX) y Cuautitlán Izcalli (EdoMex) 📍 ¿A cuál te queda mejor acudir?';
+const Q_UBICACION     = 'Trabajamos en dos ubicaciones 📍\n1️⃣ Azcapotzalco (CDMX)\n2️⃣ Cuautitlán Izcalli (EdoMex)\n\n¿A cuál te queda mejor acudir? Responde 1 o 2 👇';
 const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. 📝';
 const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
 const FU_DEP_CUANTOS  = '¿Cuántos dependientes económicos tienes a tu cargo? (Si no tienes, dime "ninguno")';
@@ -58,6 +57,12 @@ const FU_DOC          = 'Sin problema 😊 ¿Puedes conseguir o completar lo que
 const Q_BANCO1        = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
 const FU_BANCO2       = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
 const FU_BANCO3       = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
+const Q_CORREGIR      = 'Con gusto lo corrijo 🙂 ¿Qué dato quieres cambiar? Escríbelo así: "mi edad es 25" o "mi turno es matutino".';
+const CIERRE_MENOR    = 'Agradecemos mucho tu interés y el tiempo que te tomaste 🙏 Sin embargo, por disposición legal necesitamos que seas mayor de edad (18 años o más) para continuar, por lo que tu proceso ha concluido por ahora. Te deseamos mucho éxito. 😊';
+const CIERRE_ZONA     = 'Entendido 🙏 Por ahora solo tenemos vacantes en Azcapotzalco (CDMX) y Cuautitlán Izcalli (EdoMex). Si más adelante puedes acudir a alguna, con gusto te atendemos. ¡Mucho éxito! 😊';
+
+const OPC_ESTADO_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Otro'];
+const OPC_ESCOLARIDAD  = ['Primaria', 'Secundaria', 'Preparatoria', 'Universidad', 'Otro'];
 
 const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
@@ -101,10 +106,13 @@ const esSoloAfirmativo = (txt: any): boolean => {
   return resto.length <= 2;
 };
 const sinExperiencia = (txt: any): boolean => /n?ingun|sin experiencia|no he trabaj|nunca he trabaj|primer empleo|es mi primer|no tengo experiencia|te dije que no/.test(norm(txt));
-const quiereSalir = (txt: any): boolean => { const s = norm(txt); return ['adios','hasta luego','no me interesa','ya no me interesa','mejor no','ya no quiero','no gracias'].some(f => s === f || s === f + '.'); };
-const detectarCedis = (txt: any): string | null => { const z = norm(txt); if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial'; if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla/.test(z)) return 'UPS'; return null; };
+const pareceSalida = (txt: any): boolean => { const s = norm(txt); if (['adios','hasta luego','no me interesa','ya no me interesa','mejor no','ya no quiero','no gracias'].some(f => s === f || s === f + '.')) return true; return /\b(ya no me interesa|no me interesa|ya no quiero|mejor ya no|me retiro|ya no deseo|olvidalo|dejalo asi|dejalo como esta)\b/.test(s); };
+const pareceCorreccion = (txt: any): boolean => /\b(me equivoqu|equivoque|corrig|quise decir|queria decir)\b/.test(norm(txt));
+const declinaZona = (txt: any): boolean => { const s = norm(txt); return esNegativo(txt) || /ningun|no puedo ir|no me queda|ninguna de las dos|a ninguna/.test(s); };
+const detectarCedis = (txt: any): string | null => { const z = norm(txt); if (/azcapotzalco|rosario|vallejo|cdmx|ciudad de m|popotla|claveria/.test(z)) return 'Editorial'; if (/cuautitl|izcalli|sabino|edomex|estado de m|tultitl|tultepec|coacalco|tlalnepantla|coatitlan/.test(z)) return 'UPS'; return null; };
 const detectarTurno = (txt: any): string | null => { const s = norm(txt); if (/matut|manana|maniana|6am|8am/.test(s)) return 'Matutino'; if (/vesper|tarde|1pm|11am/.test(s)) return 'Vespertino'; if (/noct|noche|10pm/.test(s)) return 'Nocturno'; return null; };
 const soloEntero = (txt: any): number | null => { const s = norm(txt); if (/ningun|nada|cero|sin experiencia|^no$/.test(s)) return 0; const m = s.match(/\d+/); return m ? parseInt(m[0],10) : null; };
+const soloDigito = (txt: any): number | null => { const m = norm(txt).match(/\d+/); return m ? parseInt(m[0],10) : null; };
 const limpiarNombre = (t: any): string => String(t).replace(/^\s*(hola,?\s*)?(me llamo|mi nombre es|soy)\s+/i, '').trim();
 
 /* ── INTÉRPRETE (IA) ── */
@@ -112,7 +120,7 @@ type Interp = { intencion: string; si_no: string | null; numero: number | null; 
 
 async function interpretar(apiKey: string, preguntaActual: string, historialReciente: any[], msg: any): Promise<Interp> {
   const fallback: Interp = {
-    intencion: quiereSalir(msg) ? 'salir' : 'responder',
+    intencion: 'responder',
     si_no: esAfirmativo(msg) ? 'si' : (esNegativo(msg) ? 'no' : null),
     numero: soloEntero(msg), turno: detectarTurno(msg), texto: String(msg).trim(),
     correccion_campo: null, correccion_valor: null
@@ -120,7 +128,7 @@ async function interpretar(apiKey: string, preguntaActual: string, historialReci
   if (!apiKey) return fallback;
   const sys = `Eres el intérprete de una entrevista de reclutamiento por WhatsApp para Rio Logística.
 ARIS acaba de preguntar: "${preguntaActual}".
-El candidato puede responder con faltas de ortografía, abreviaturas, de forma informal o en pedazos. Interpreta su mensaje y responde SOLO con este JSON:
+El candidato puede responder con faltas de ortografía, abreviaturas, de forma informal, con un número de opción o en pedazos. Interpreta su mensaje y responde SOLO con este JSON:
 {
  "intencion": "responder" | "corregir" | "salir" | "confuso",
  "si_no": "si" | "no" | null,
@@ -132,10 +140,9 @@ El candidato puede responder con faltas de ortografía, abreviaturas, de forma i
 }
 Reglas:
 - "si_no": solo si la respuesta es claramente afirmativa o negativa a lo que se le preguntó.
-- "numero": extrae la cantidad si mencionó una.
+- "numero": extrae la cantidad o el número de opción si mencionó uno.
 - "turno": solo si eligió un turno de trabajo.
-- "intencion":"corregir" SOLO si pide explícitamente cambiar un dato que ya había dado (ej. "me equivoqué, mi edad es 25"). Si solo está respondiendo la pregunta actual, usa "responder".
-- "intencion":"salir" si ya no le interesa la vacante.
+- Si el candidato dice qué dato quiere cambiar y a qué valor (ej. "mi edad es 25"), pon "correccion_campo" y "correccion_valor".
 - Nunca inventes datos que el candidato no haya dado.`;
   try {
     const mensajes = [{ role: 'system', content: sys }, ...historialReciente, { role: 'user', content: String(msg) }];
@@ -165,10 +172,13 @@ function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, r
     if (nom.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ]/g, '').length < 2) return { reask: 'Perdona, no te entendí. ¿Me compartes tu nombre completo? 🙏' };
     return { valor: nom };
   }
-  if (campo === 'turno_preferido') { if (I.turno) return { valor: I.turno }; return { reask: '¿Qué turno te gustaría: matutino, vespertino o nocturno?' }; }
-  if (campo === 'escolaridad_comprobable') {
-    if (I.si_no === 'no' && I.numero === null) return { valor: 'Sin escolaridad comprobable' };
-    return { valor: I.texto || String(msgRaw).trim() };
+  if (campo === 'turno_preferido') {
+    if (I.turno) return { valor: I.turno };
+    const n = soloDigito(msgRaw);
+    if (n === 1) return { valor: 'Matutino' };
+    if (n === 2) return { valor: 'Vespertino' };
+    if (n === 3) return { valor: 'Nocturno' };
+    return { reask: 'Responde con el número de tu turno: 1 (Matutino), 2 (Vespertino) o 3 (Nocturno) 👇' };
   }
   if (INT.has(campo)) {
     const n = I.numero;
@@ -193,8 +203,8 @@ function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, r
 }
 
 function vacante(cedis: string | null): string {
-  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n• Matutino: 6am - 4pm\n• Vespertino: 1pm - 10pm\n• Nocturno: 10pm - 7am\n\n¿Te interesa? ¿Qué turno te gustaría?`;
-  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n• Matutino: 8am - 6pm\n• Vespertino: 11am - 10pm\n• Nocturno: 10pm - 6am\n\n¿Te interesa? ¿Qué turno te gustaría?`;
+  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (6am - 4pm)\n2️⃣ Vespertino (1pm - 10pm)\n3️⃣ Nocturno (10pm - 7am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
+  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $296 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (8am - 6pm)\n2️⃣ Vespertino (11am - 10pm)\n3️⃣ Nocturno (10pm - 6am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
   return Q_UBICACION;
 }
 
@@ -216,9 +226,9 @@ function clasificar(e: any): string {
   const cedis = e.vacante_cedis;
   const banco = norm(e.cuenta_banco_santander_problemas);
   const edad = Number(e.edad);
-  const esRechazo = vertigo || (botas === false && cedis === 'UPS');
+  const esRechazo = vertigo || (botas === false && cedis === 'UPS') || (edad && edad < 18);
   const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('aclaracion')
-    || (botas === false && cedis !== 'UPS') || edad < 18 || edad > 55;
+    || (botas === false && cedis !== 'UPS') || (edad && edad > 45);
   return esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
 }
 
@@ -254,13 +264,12 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(saludo, {}, 'Nuevo', estado.vacante_cedis);
   }
 
-  const I = await interpretar(apiKey, ultimoBot, historial.slice(-6), mensajeUsuario);
-
-  if (I.intencion === 'salir') {
-    const despedida = 'Sin problema, fue un gusto. Si en el futuro te interesa, aquí estaremos. ¡Que tengas excelente día! 😊';
-    return empaquetar(despedida, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+  // MENOR DE EDAD: ya registrada y <18 -> no se continúa
+  if (estado.edad != null && Number(estado.edad) < 18) {
+    return empaquetar(CIERRE_MENOR, {}, 'Rechazado', estado.vacante_cedis);
   }
 
+  const I = await interpretar(apiKey, ultimoBot, historial.slice(-6), mensajeUsuario);
   const campoActual = CAMPOS.find(c => estado[c] == null) || null;
 
   if (!campoActual) {
@@ -271,15 +280,25 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     return empaquetar(cierreTexto(estado.nombre_completo), {}, estatus, estado.vacante_cedis);
   }
 
-  // CORRECCIÓN
-  const pareceCorreccion = /\b(me equivoqu|equivoque|corrig|cambia|cambie|esta mal|en realidad|queria decir|quise decir)\b/.test(norm(mensajeUsuario));
-  if (I.intencion === 'corregir' && pareceCorreccion && I.correccion_campo && I.correccion_valor != null && estado[I.correccion_campo] != null && I.correccion_campo !== campoActual) {
-    const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
-    const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, estado.vacante_cedis);
-    return empaquetar(`Listo, ya lo corregí 👍\n\n${q}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+  if (/que dato quieres cambiar/i.test(norm(ultimoBot))) {
+    if (I.correccion_campo && I.correccion_valor != null) {
+      const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
+      return empaquetar(`¡Listo, ya lo corregí! 👍\n\n${textoPregunta(campoActual, estado.vacante_cedis)}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+    }
+    return empaquetar(`Perfecto, sigamos 🙂\n\n${textoPregunta(campoActual, estado.vacante_cedis)}`, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
-  if (I.intencion === 'corregir' && pareceCorreccion) {
-    return empaquetar('Claro, con gusto lo corrijo. ¿Qué dato quieres cambiar? Dime por ejemplo: "mi edad es 25" o "mi turno es matutino". 🙂', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+
+  if (pareceSalida(mensajeUsuario)) {
+    return empaquetar('Sin problema, fue un gusto. Si en el futuro te interesa, aquí estaremos. ¡Que tengas excelente día! 😊', {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+  }
+
+  if (pareceCorreccion(mensajeUsuario)) {
+    if (I.correccion_campo && I.correccion_valor != null && estado[I.correccion_campo] != null && I.correccion_campo !== campoActual) {
+      const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
+      const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, estado.vacante_cedis);
+      return empaquetar(`Listo, ya lo corregí 👍\n\n${q}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+    }
+    return empaquetar(Q_CORREGIR, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
   const extraccion: any = {};
@@ -287,8 +306,30 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   let preamble = '';
 
   if (campoActual === 'zona_vivienda') {
-    if (detectarCedis(I.texto) || detectarCedis(mensajeUsuario)) extraccion.zona_vivienda = (I.texto || String(mensajeUsuario)).trim();
-    else seguimiento = Q_UBICACION;
+    if (ultimoBot === Q_UBICACION) {
+      let elec = detectarCedis(I.texto) || detectarCedis(mensajeUsuario);
+      const nUbi = soloDigito(mensajeUsuario);
+      if (!elec && nUbi === 1) elec = 'Editorial';
+      if (!elec && nUbi === 2) elec = 'UPS';
+      if (elec === 'Editorial') extraccion.zona_vivienda = 'Azcapotzalco';
+      else if (elec === 'UPS') extraccion.zona_vivienda = 'Cuautitlán Izcalli';
+      else if (declinaZona(mensajeUsuario)) return empaquetar(CIERRE_ZONA, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+      else seguimiento = Q_UBICACION;
+    } else {
+      if (detectarCedis(I.texto) || detectarCedis(mensajeUsuario)) extraccion.zona_vivienda = (I.texto || String(mensajeUsuario)).trim();
+      else seguimiento = Q_UBICACION;
+    }
+  }
+  else if (campoActual === 'estado_civil') {
+    const n = soloDigito(mensajeUsuario);
+    if (n && n >= 1 && n <= 4) extraccion.estado_civil = OPC_ESTADO_CIVIL[n - 1];
+    else extraccion.estado_civil = I.texto;
+  }
+  else if (campoActual === 'escolaridad_comprobable') {
+    const n = soloDigito(mensajeUsuario);
+    if (n && n >= 1 && n <= 5) extraccion.escolaridad_comprobable = OPC_ESCOLARIDAD[n - 1];
+    else if (I.si_no === 'no') extraccion.escolaridad_comprobable = 'Sin escolaridad comprobable';
+    else extraccion.escolaridad_comprobable = I.texto;
   }
   else if (SALUD_DETALLE.has(campoActual)) {
     if (ultimoBot === FU_CUALES) extraccion[campoActual] = I.texto;
@@ -326,7 +367,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     const cualDicho = /infonavit/.test(dice) ? 'Infonavit' : (/fonacot/.test(dice) ? 'Fonacot' : null);
     if (ultimoBot === FU_INFONAVIT) extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${I.texto}`;
     else if (ultimoBot === FU_CUAL_CREDITO) seguimiento = FU_INFONAVIT;
-    else if (cualDicho) seguimiento = FU_INFONAVIT; // ya dijo cuál de una vez
+    else if (cualDicho) seguimiento = FU_INFONAVIT;
     else if (I.si_no === 'si') seguimiento = FU_CUAL_CREDITO;
     else extraccion.credito_infonavit_fonacot = 'No';
   }
@@ -358,6 +399,10 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     const r = procesarSimple(campoActual, I, mensajeUsuario);
     if (r.reask) seguimiento = r.reask;
     else extraccion[campoActual] = r.valor;
+  }
+
+  if (extraccion.edad != null && Number(extraccion.edad) < 18) {
+    return empaquetar(CIERRE_MENOR, extraccion, 'Rechazado', estado.vacante_cedis);
   }
 
   if (seguimiento) {
