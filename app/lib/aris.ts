@@ -30,7 +30,7 @@ const PREGUNTAS: Record<string, string> = {
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?\n1️⃣ Primaria   2️⃣ Secundaria   3️⃣ Preparatoria   4️⃣ Universidad   5️⃣ Otro\n\nResponde con el número 👇',
   experiencia_almacen_meses: '¿Cuánta experiencia tienes en almacén?\n1️⃣ Ninguna\n2️⃣ 1-6 meses\n3️⃣ 1 año o más\n\nResponde con el número 👇',
   areas_desempenadas: '¿En qué áreas te has desempeñado? Puedes elegir varias 👇\n1️⃣ Surtido   2️⃣ Empaquetado   3️⃣ Acomodo   4️⃣ Etiquetado',
-  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?\n1️⃣ Preferencia económica\n2️⃣ Distancia\n3️⃣ Personal-Familiar\n\nResponde con el número 👇',
+  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?\n1️⃣ Pretención económica\n2️⃣ Distancia\n3️⃣ Prestaciones de ley\n4️⃣Personal-Familiar\n\nResponde con el número 👇',
   tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
   nivel_salud_percecion: '¿Cómo calificarías tu estado de salud del 1 al 10, siendo 10 excelente?',
   enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
@@ -42,7 +42,7 @@ const PREGUNTAS: Record<string, string> = {
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
   tiene_botas_casquillo: '¿Tienes botas de casquillo?',
-  referidos_familiares_nombres: '¿Cómo te enteraste de la vacante?\n1️⃣ Familia\n2️⃣ Bolsa de trabajo – Rio Logística\n3️⃣ Referido\n\nResponde con el número 👇',
+  referidos_familiares_nombres: '¿Cómo te enteraste de la vacante?\n1️⃣ Familia\n2️⃣ Bolsa de trabajo – Rio Logística\n3️⃣ Referido \n4️⃣ Reingreso\n\nResponde con el número 👇',
 };
 
 const Q_UBICACION     = 'Trabajamos en dos ubicaciones 📍\n1️⃣ Azcapotzalco (CDMX)\n2️⃣ Cuautitlán Izcalli (EdoMex)\n\n¿A cuál te queda mejor acudir? Responde 1 o 2 👇';
@@ -50,7 +50,7 @@ const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. �
 const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
 const FU_DEP_CUANTOS  = '¿Cuántos dependientes económicos tienes a tu cargo? (Si no tienes, dime "ninguno")';
 const FU_CUAL_CREDITO = '¿Cuál de los dos: Infonavit o Fonacot?';
-const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones Y tu estado de cuenta, ambos actualizados 📄 ¿Los tienes o puedes conseguirlos?';
+const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones. Y tu estado de cuenta, ambos actualizados 📄 ¿Los tienes o puedes conseguirlos?';
 const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es el nombre completo de quien te refirió?';
 const FU_DOC          = 'Sin problema 😊 ¿Puedes conseguir o completar lo que te falta antes de ingresar?';
 const Q_BANCO         = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦\n1️⃣ Estoy de acuerdo\n2️⃣ Tengo un adeudo, bloqueo o aclaración pendiente\n\nResponde con el número 👇';
@@ -83,7 +83,7 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 ¿Cuentas con toda esta documentación actualizada?`;
 
 const cierreTexto = (nombre: any): string =>
-  `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
+  `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. Compartenos tu solicitud o CV por este medio. ¡Gracias por tu interés!`;
 
 /* ── Helpers ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
