@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
-   ARIS · Cerebro de entrevista — PLAN B
+   ARIS · Cerebro de entrevista — FLUJO PRH (Azcapotzalco)
    ══════════════════════════════════════════════════════════════ */
 
 const CAMPOS = [
@@ -12,8 +12,7 @@ const CAMPOS = [
   'nivel_salud_percecion', 'enfermedades_cronicas', 'lesiones_o_cirugias', 'alergias',
   'problemas_respiratorios', 'sufre_vertigo', 'usa_lentes', 'credito_infonavit_fonacot',
   'procesos_legales_antecedentes', 'documentacion_completa_original', 'tiene_botas_casquillo',
-  'tipo_calzado_actual', 'referidos_familiares_nombres', 'es_reingreso',
-  'cuenta_banco_santander_problemas'
+  'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
 ];
 
 const BOOL = new Set(['inconveniente_traslado', 'tiene_constancias_laborales', 'problemas_respiratorios', 'sufre_vertigo', 'usa_lentes', 'documentacion_completa_original', 'tiene_botas_casquillo', 'es_reingreso']);
@@ -29,9 +28,9 @@ const PREGUNTAS: Record<string, string> = {
   tiempo_traslado_minutos: '¿Cuánto tiempo te tomaría trasladarte al almacén, en minutos aproximadamente?',
   inconveniente_traslado: '¿Tienes algún inconveniente para trasladarte al trabajo?',
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?\n1️⃣ Primaria   2️⃣ Secundaria   3️⃣ Preparatoria   4️⃣ Universidad   5️⃣ Otro\n\nResponde con el número 👇',
-  experiencia_almacen_meses: '¿Cuántos meses de experiencia tienes en almacén? (Si no tienes, dime "ninguna")',
-  areas_desempenadas: '¿En qué áreas o trabajos te has desempeñado? (Si es tu primer empleo, dime "ninguno")',
-  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?',
+  experiencia_almacen_meses: '¿Cuánta experiencia tienes en almacén?\n1️⃣ Ninguna\n2️⃣ 1-6 meses\n3️⃣ 1 año o más\n\nResponde con el número 👇',
+  areas_desempenadas: '¿En qué áreas te has desempeñado? Puedes elegir varias 👇\n1️⃣ Surtido   2️⃣ Empaquetado   3️⃣ Acomodo   4️⃣ Etiquetado',
+  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?\n1️⃣ Preferencia económica\n2️⃣ Distancia\n3️⃣ Personal-Familiar\n\nResponde con el número 👇',
   tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
   nivel_salud_percecion: '¿Cómo calificarías tu estado de salud del 1 al 10, siendo 10 excelente?',
   enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
@@ -43,8 +42,7 @@ const PREGUNTAS: Record<string, string> = {
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
   tiene_botas_casquillo: '¿Tienes botas de casquillo?',
-  tipo_calzado_actual: '¿Qué tipo de calzado usas habitualmente para trabajar?',
-  referidos_familiares_nombres: '¿Algún familiar o conocido en Rio Logística te refirió?',
+  referidos_familiares_nombres: '¿Cómo te enteraste de la vacante?\n1️⃣ Familia\n2️⃣ Bolsa de trabajo – Rio Logística\n3️⃣ Referido\n\nResponde con el número 👇',
 };
 
 const Q_UBICACION     = 'Trabajamos en dos ubicaciones 📍\n1️⃣ Azcapotzalco (CDMX)\n2️⃣ Cuautitlán Izcalli (EdoMex)\n\n¿A cuál te queda mejor acudir? Responde 1 o 2 👇';
@@ -52,18 +50,18 @@ const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. �
 const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
 const FU_DEP_CUANTOS  = '¿Cuántos dependientes económicos tienes a tu cargo? (Si no tienes, dime "ninguno")';
 const FU_CUAL_CREDITO = '¿Cuál de los dos: Infonavit o Fonacot?';
-const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones actualizada 📄 ¿La tienes o puedes conseguirla?';
-const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es su nombre completo?';
+const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones Y tu estado de cuenta, ambos actualizados 📄 ¿Los tienes o puedes conseguirlos?';
+const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es el nombre completo de quien te refirió?';
 const FU_DOC          = 'Sin problema 😊 ¿Puedes conseguir o completar lo que te falta antes de ingresar?';
-const Q_BANCO1        = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦 ¿Con qué banco trabajas actualmente?';
-const FU_BANCO2       = 'Sin problema 😊 Nuestro equipo te tramitará tu tarjeta Santander sin complicaciones. ¿Has tenido algún adeudo, bloqueo o aclaración pendiente con Banco Santander?';
-const FU_BANCO3       = '¿Cuál de esos: un adeudo, un bloqueo o una aclaración?';
+const Q_BANCO         = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦\n1️⃣ Estoy de acuerdo\n2️⃣ Tengo un adeudo, bloqueo o aclaración pendiente\n\nResponde con el número 👇';
 const Q_CORREGIR      = 'Con gusto lo corrijo 🙂 ¿Qué dato quieres cambiar? Escríbelo así: "mi edad es 25" o "mi turno es matutino".';
 const CIERRE_MENOR    = 'Agradecemos mucho tu interés y el tiempo que te tomaste 🙏 Sin embargo, por disposición legal necesitamos que seas mayor de edad (18 años o más) para continuar, por lo que tu proceso ha concluido por ahora. Te deseamos mucho éxito. 😊';
 const CIERRE_ZONA     = 'Entendido 🙏 Por ahora solo tenemos vacantes en Azcapotzalco (CDMX) y Cuautitlán Izcalli (EdoMex). Si más adelante puedes acudir a alguna, con gusto te atendemos. ¡Mucho éxito! 😊';
 
 const OPC_ESTADO_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Otro'];
 const OPC_ESCOLARIDAD  = ['Primaria', 'Secundaria', 'Preparatoria', 'Universidad', 'Otro'];
+const OPC_AREAS        = ['Surtido', 'Empaquetado', 'Acomodo', 'Etiquetado'];
+const OPC_MOTIVO       = ['Preferencia económica', 'Distancia', 'Personal-Familiar'];
 
 const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
@@ -82,7 +80,7 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
 ⚠️ Indispensable: Botas de casquillo y pantalón de mezclilla sin roturas
 
-¿Cuentas con toda esta documentación?`;
+¿Cuentas con toda esta documentación actualizada?`;
 
 const cierreTexto = (nombre: any): string =>
   `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
@@ -98,8 +96,8 @@ const esAfirmativo = (txt: any): boolean => {
   if (esNegativo(txt)) return false;
   const s = norm(txt); const c = s.replace(/[^a-z]/g, '');
   if (/^s+i+$/.test(c)) return true;
-  if (['si','is','sip','sipi','simon','sale','va','dale','claro','obvio','correcto','afirmativo','exacto','porsupuesto','asies','sisi','siclaro'].includes(c)) return true;
-  return /\b(si|claro|obvio|correcto|afirmativo|sale|simon|por supuesto|asi es|tengo|si tengo|cuento con|puedo)\b/.test(s);
+  if (['si','is','sip','sipi','simon','sale','va','dale','claro','obvio','correcto','afirmativo','exacto','porsupuesto','asies','sisi','siclaro','acuerdo','deacuerdo'].includes(c)) return true;
+  return /\b(si|claro|obvio|correcto|afirmativo|sale|simon|por supuesto|asi es|tengo|si tengo|cuento con|puedo|de acuerdo|estoy de acuerdo)\b/.test(s);
 };
 const esSoloAfirmativo = (txt: any): boolean => {
   if (!esAfirmativo(txt)) return false;
@@ -212,10 +210,10 @@ function vacante(cedis: string | null): string {
 function textoPregunta(campo: string, cedis: string | null): string {
   if (campo === 'turno_preferido') return vacante(cedis);
   if (campo === 'documentacion_completa_original') return TEXT_DOC;
-  if (campo === 'cuenta_banco_santander_problemas') return Q_BANCO1;
+  if (campo === 'cuenta_banco_santander_problemas') return Q_BANCO;
   if (campo === 'es_reingreso') {
     return cedis === 'UPS' ? '¿Has trabajado anteriormente en Rio Logística o en UPS?'
-      : cedis === 'Editorial' ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House?'
+      : cedis === 'Editorial' ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House (PRH)?'
       : '¿Has trabajado anteriormente en Rio Logística?';
   }
   return PREGUNTAS[campo] || '¿Podrías contarme un poco más?';
@@ -228,7 +226,7 @@ function clasificar(e: any): string {
   const banco = norm(e.cuenta_banco_santander_problemas);
   const edad = Number(e.edad);
   const esRechazo = vertigo || (botas === false && cedis === 'UPS') || (edad && edad < 18);
-  const esPendiente = banco.includes('problema con santander') || banco.includes('adeudo') || banco.includes('bloqueo')
+  const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('aclaracion')
     || (botas === false && cedis !== 'UPS') || (edad && edad > 45);
   return esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
 }
@@ -331,6 +329,45 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else if (I.si_no === 'no') extraccion.escolaridad_comprobable = 'Sin escolaridad comprobable';
     else extraccion.escolaridad_comprobable = I.texto;
   }
+  else if (campoActual === 'experiencia_almacen_meses') {
+    const s = norm(mensajeUsuario);
+    const n = soloDigito(mensajeUsuario);
+    let bucket: number | null = null;
+    if (sinExperiencia(mensajeUsuario) || I.si_no === 'no') bucket = 0;
+    else if (/\b(ano|anos|anios)\b/.test(s)) bucket = 12;
+    else if (/mes/.test(s)) bucket = (n != null && n >= 12 ? 12 : 6);
+    else if (n === 1) bucket = 0;
+    else if (n === 2) bucket = 6;
+    else if (n === 3) bucket = 12;
+    else if (n != null) bucket = (n === 0 ? 0 : (n >= 12 ? 12 : 6));
+    if (bucket === null) seguimiento = 'Responde con el número de tu experiencia: 1 (Ninguna), 2 (1-6 meses) o 3 (1 año o más) 👇';
+    else {
+      extraccion.experiencia_almacen_meses = bucket;
+      if (bucket === 0) { // primer empleo -> saltamos áreas y motivo
+        extraccion.areas_desempenadas = 'Sin experiencia previa';
+        extraccion.motivo_salida_anterior = 'Sin empleo anterior';
+        extraccion.tiene_constancias_laborales = false;
+        preamble = '¡No hay problema, todos empezamos algún día! 😊 ';
+      }
+    }
+  }
+  else if (campoActual === 'areas_desempenadas') {
+    const s = norm(mensajeUsuario);
+    const sel = new Set<string>();
+    (s.match(/[1-4]/g) || []).forEach(d => { const n = Number(d); if (n >= 1 && n <= 4) sel.add(OPC_AREAS[n - 1]); });
+    if (/surtido/.test(s)) sel.add('Surtido');
+    if (/empaqu|empacar|empaque/.test(s)) sel.add('Empaquetado');
+    if (/acomod/.test(s)) sel.add('Acomodo');
+    if (/etiquet/.test(s)) sel.add('Etiquetado');
+    if (sel.size) extraccion.areas_desempenadas = Array.from(sel).join(', ');
+    else extraccion.areas_desempenadas = I.texto;
+  }
+  else if (campoActual === 'motivo_salida_anterior') {
+    const n = soloDigito(mensajeUsuario);
+    if (n && n >= 1 && n <= 3) extraccion.motivo_salida_anterior = OPC_MOTIVO[n - 1];
+    else if (sinExperiencia(mensajeUsuario)) { extraccion.motivo_salida_anterior = 'Sin empleo anterior'; extraccion.tiene_constancias_laborales = false; }
+    else extraccion.motivo_salida_anterior = I.texto;
+  }
   else if (SALUD_DETALLE.has(campoActual)) {
     if (ultimoBot === FU_CUALES) extraccion[campoActual] = I.texto;
     else if (I.si_no === 'no') extraccion[campoActual] = 'Ninguna';
@@ -346,17 +383,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else if (I.numero != null) extraccion.dependientes_economicos = I.numero;
     else seguimiento = FU_DEP_CUANTOS;
   }
-  else if (campoActual === 'areas_desempenadas') {
-    if (I.si_no === 'no' || sinExperiencia(I.texto) || sinExperiencia(mensajeUsuario)) {
-      extraccion.areas_desempenadas = 'Sin experiencia previa';
-      extraccion.motivo_salida_anterior = 'Sin empleo anterior';
-      extraccion.tiene_constancias_laborales = false;
-    } else extraccion.areas_desempenadas = I.texto;
-  }
-  else if (campoActual === 'motivo_salida_anterior') {
-    if (sinExperiencia(I.texto) || sinExperiencia(mensajeUsuario)) { extraccion.motivo_salida_anterior = 'Sin empleo anterior'; extraccion.tiene_constancias_laborales = false; }
-    else extraccion.motivo_salida_anterior = I.texto;
-  }
   else if (campoActual === 'tiene_botas_casquillo') {
     if (ultimoBot === FU_BOTAS) extraccion.tiene_botas_casquillo = false;
     else if (I.si_no === 'si') extraccion.tiene_botas_casquillo = true;
@@ -365,7 +391,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   else if (campoActual === 'credito_infonavit_fonacot') {
     const dicho = norm(mensajeUsuario);
     const cualDicho = /infonavit/.test(dicho) ? 'Infonavit' : (/fonacot/.test(dicho) ? 'Fonacot' : null);
-    if (ultimoBot === FU_INFONAVIT) extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones: ${I.texto}`;
+    if (ultimoBot === FU_INFONAVIT) extraccion.credito_infonavit_fonacot = `Sí (${ultimoUser}). Hoja de retenciones y estado de cuenta: ${I.texto}`;
     else if (ultimoBot === FU_CUAL_CREDITO) seguimiento = FU_INFONAVIT;
     else if (cualDicho) seguimiento = FU_INFONAVIT;
     else if (I.si_no === 'si') seguimiento = FU_CUAL_CREDITO;
@@ -377,25 +403,24 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else seguimiento = FU_DOC;
   }
   else if (campoActual === 'referidos_familiares_nombres') {
+    const s = norm(mensajeUsuario);
+    const n = soloDigito(mensajeUsuario);
     if (ultimoBot === FU_REF_NOMBRE) {
       const nom = (I.texto || '').trim();
       if (nom.replace(/[^a-zA-ZáéíóúñÁÉÍÓÚÑ]/g, '').length < 2) seguimiento = '¿Me compartes el nombre completo de quien te refirió? 🙏';
-      else extraccion.referidos_familiares_nombres = nom;
+      else extraccion.referidos_familiares_nombres = 'Referido: ' + nom;
     }
-    else if (I.si_no === 'no') extraccion.referidos_familiares_nombres = 'Sin referido';
-    else if (I.si_no === 'si' && esSoloAfirmativo(mensajeUsuario)) seguimiento = FU_REF_NOMBRE;
+    else if (n === 1 || /familia/.test(s)) extraccion.referidos_familiares_nombres = 'Familia';
+    else if (n === 2 || /bolsa/.test(s)) extraccion.referidos_familiares_nombres = 'Bolsa de trabajo – Rio Logística';
+    else if (n === 3 || /referid/.test(s)) seguimiento = FU_REF_NOMBRE;
     else extraccion.referidos_familiares_nombres = I.texto;
   }
   else if (campoActual === 'cuenta_banco_santander_problemas') {
-    const dicho = norm(mensajeUsuario);
-    if (ultimoBot === FU_BANCO3) extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + I.texto;
-    else if (ultimoBot === FU_BANCO2) {
-      if (esNegativo(mensajeUsuario)) extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
-      else if (/adeudo|bloqueo|aclaracion/.test(dicho)) extraccion.cuenta_banco_santander_problemas = 'Problema con Santander: ' + I.texto;
-      else if (I.si_no === 'si') seguimiento = FU_BANCO3;
-      else extraccion.cuenta_banco_santander_problemas = 'Sin incidencias con Santander';
-    } else if (dicho.includes('santander')) extraccion.cuenta_banco_santander_problemas = 'Ya cuenta con Santander';
-    else seguimiento = FU_BANCO2;
+    const s = norm(mensajeUsuario);
+    const n = soloDigito(mensajeUsuario);
+    if (n === 2 || /adeudo|bloqueo|aclaracion/.test(s)) extraccion.cuenta_banco_santander_problemas = 'Tiene adeudo, bloqueo o aclaración con Santander';
+    else if (n === 1 || esAfirmativo(mensajeUsuario) || /acuerdo/.test(s)) extraccion.cuenta_banco_santander_problemas = 'De acuerdo con Santander (sin incidencias)';
+    else seguimiento = Q_BANCO;
   }
   else {
     const r = procesarSimple(campoActual, I, mensajeUsuario);
@@ -420,7 +445,6 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
 
   if (!preamble) {
     if (extraccion.nombre_completo) preamble = `¡Mucho gusto, ${extraccion.nombre_completo}! `;
-    else if (campoActual === 'experiencia_almacen_meses' && estadoNuevo.experiencia_almacen_meses === 0) preamble = '¡No hay problema, todos empezamos algún día! 😊 ';
     else if (SALUD_DETALLE.has(campoActual) && extraccion[campoActual] && extraccion[campoActual] !== 'Ninguna') preamble = 'Gracias por compartirlo, lo tomo en cuenta. ';
   }
 
