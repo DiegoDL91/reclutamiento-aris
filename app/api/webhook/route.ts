@@ -5,7 +5,8 @@ import { arisBrain } from '../../lib/aris';
 const BOOL_FIELDS = new Set([
   'inconveniente_traslado', 'tiene_constancias_laborales', 'problemas_respiratorios',
   'sufre_vertigo', 'usa_lentes', 'documentacion_completa_original',
-  'tiene_botas_casquillo', 'es_reingreso'
+  'tiene_botas_casquillo', 'es_reingreso',
+  'experiencia_farmaceutica', 'experiencia_camaras_frias', 'inconveniente_camaras_frias', 'cv_recibido'
 ]);
 
 const INT_FIELDS = new Set([
@@ -23,12 +24,10 @@ const coerce = (campo: string, val: any): any => {
     return null;
   }
 
-  // dependientes: integer, maneja texto libre
   if (campo === 'dependientes_economicos') {
     if (typeof val === 'number') return Math.round(val);
-    // 0 ya viene forzado desde aris.ts para negativos
     const n = parseInt(s);
-    return isNaN(n) ? 1 : n; // si no parsea (ej: "mi mamá"), asume 1
+    return isNaN(n) ? 1 : n;
   }
 
   if (INT_FIELDS.has(campo)) {
@@ -64,7 +63,6 @@ export async function POST(req: Request) {
     const objetoIA = JSON.parse(rawRespuesta);
     const ex = objetoIA.extraccion || {};
 
-    // GUARDADO 1: crítico
     const critico: any = { telefono_whatsapp: tel, estatus: objetoIA.estatus || 'Nuevo' };
     if (objetoIA._historial) critico.historial = JSON.stringify(objetoIA._historial);
     if (objetoIA.cedis && objetoIA.cedis !== 'null') critico.vacante_cedis = objetoIA.cedis;
@@ -74,7 +72,6 @@ export async function POST(req: Request) {
       .upsert(critico, { onConflict: 'telefono_whatsapp' });
     if (e1) console.error('Error guardando memoria:', e1.message);
 
-    // GUARDADO 2: datos extraídos
     const campos = [
       'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido',
       'estado_civil', 'dependientes_economicos', 'apoyo_cuidado_dependientes',
@@ -84,7 +81,8 @@ export async function POST(req: Request) {
       'lesiones_o_cirugias', 'alergias', 'problemas_respiratorios', 'sufre_vertigo',
       'usa_lentes', 'credito_infonavit_fonacot', 'procesos_legales_antecedentes',
       'documentacion_completa_original', 'tiene_botas_casquillo', 'tipo_calzado_actual',
-      'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
+      'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas',
+      'experiencia_farmaceutica', 'experiencia_camaras_frias', 'inconveniente_camaras_frias', 'cv_recibido'
     ];
 
     const datos: any = { telefono_whatsapp: tel };

@@ -1,10 +1,10 @@
 import { supabase } from './supabase';
 
 /* ══════════════════════════════════════════════════════════════
-   ARIS · Cerebro de entrevista — FLUJO PRH (Azcapotzalco)
+   ARIS · Cerebro de entrevista — DOS FLUJOS (PRH y El Sabino/UPS)
    ══════════════════════════════════════════════════════════════ */
 
-const CAMPOS = [
+const CAMPOS_PRH = [
   'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido', 'estado_civil',
   'dependientes_economicos', 'apoyo_cuidado_dependientes', 'tiempo_traslado_minutos',
   'inconveniente_traslado', 'escolaridad_comprobable', 'experiencia_almacen_meses',
@@ -15,7 +15,22 @@ const CAMPOS = [
   'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
 ];
 
-const BOOL = new Set(['inconveniente_traslado', 'tiene_constancias_laborales', 'problemas_respiratorios', 'sufre_vertigo', 'usa_lentes', 'documentacion_completa_original', 'tiene_botas_casquillo', 'es_reingreso']);
+const CAMPOS_UPS = [
+  'nombre_completo', 'edad', 'zona_vivienda', 'turno_preferido', 'estado_civil',
+  'dependientes_economicos', 'apoyo_cuidado_dependientes', 'tiempo_traslado_minutos',
+  'inconveniente_traslado', 'escolaridad_comprobable', 'experiencia_almacen_meses',
+  'areas_desempenadas', 'experiencia_farmaceutica', 'experiencia_camaras_frias', 'inconveniente_camaras_frias',
+  'motivo_salida_anterior', 'tiene_constancias_laborales',
+  'nivel_salud_percecion', 'enfermedades_cronicas', 'lesiones_o_cirugias', 'alergias',
+  'problemas_respiratorios', 'usa_lentes', 'credito_infonavit_fonacot',
+  'procesos_legales_antecedentes', 'documentacion_completa_original', 'tiene_botas_casquillo',
+  'referidos_familiares_nombres', 'es_reingreso', 'cuenta_banco_santander_problemas'
+];
+
+const ALL_CAMPOS = [...CAMPOS_PRH, 'experiencia_farmaceutica', 'experiencia_camaras_frias', 'inconveniente_camaras_frias'];
+const getCampos = (cedis: any) => cedis === 'UPS' ? CAMPOS_UPS : CAMPOS_PRH;
+
+const BOOL = new Set(['inconveniente_traslado', 'tiene_constancias_laborales', 'problemas_respiratorios', 'sufre_vertigo', 'usa_lentes', 'documentacion_completa_original', 'tiene_botas_casquillo', 'es_reingreso', 'experiencia_farmaceutica', 'experiencia_camaras_frias', 'inconveniente_camaras_frias']);
 const INT = new Set(['edad', 'tiempo_traslado_minutos', 'experiencia_almacen_meses', 'nivel_salud_percecion']);
 const SALUD_DETALLE = new Set(['enfermedades_cronicas', 'lesiones_o_cirugias', 'alergias']);
 
@@ -30,7 +45,10 @@ const PREGUNTAS: Record<string, string> = {
   escolaridad_comprobable: '¿Cuál es tu nivel de escolaridad comprobable?\n1️⃣ Primaria   2️⃣ Secundaria   3️⃣ Preparatoria   4️⃣ Universidad   5️⃣ Otro\n\nResponde con el número 👇',
   experiencia_almacen_meses: '¿Cuánta experiencia tienes en almacén?\n1️⃣ Ninguna\n2️⃣ 1-6 meses\n3️⃣ 1 año o más\n\nResponde con el número 👇',
   areas_desempenadas: '¿En qué áreas te has desempeñado? Puedes elegir varias 👇\n1️⃣ Surtido   2️⃣ Empaquetado   3️⃣ Acomodo   4️⃣ Etiquetado',
-  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?\n1️⃣ Pretención económica\n2️⃣ Distancia\n3️⃣ Prestaciones de ley\n4️⃣Personal-Familiar\n\nResponde con el número 👇',
+  experiencia_farmaceutica: '¿Has trabajado en industria farmacéutica?',
+  experiencia_camaras_frias: '¿Has trabajado en cámaras frías?',
+  inconveniente_camaras_frias: '¿Tienes algún inconveniente en ingresar a cámaras frías?\n1️⃣ Sí   2️⃣ No\n\nResponde con el número 👇',
+  motivo_salida_anterior: '¿Cuál fue el motivo de tu salida del empleo anterior?\n1️⃣ Preferencia económica\n2️⃣ Distancia\n3️⃣ Prestaciones de ley\n4️⃣ Personal-Familiar\n\nResponde con el número 👇',
   tiene_constancias_laborales: '¿Tienes constancias laborales de tus trabajos anteriores?',
   nivel_salud_percecion: '¿Cómo calificarías tu estado de salud del 1 al 10, siendo 10 excelente?',
   enfermedades_cronicas: '¿Tienes alguna enfermedad crónica que debamos conocer?',
@@ -42,7 +60,7 @@ const PREGUNTAS: Record<string, string> = {
   credito_infonavit_fonacot: '¿Tienes algún crédito Infonavit o Fonacot activo que genere descuento en tu nómina?',
   procesos_legales_antecedentes: '¿Tienes algún proceso legal o antecedentes penales?',
   tiene_botas_casquillo: '¿Tienes botas de casquillo?',
-  referidos_familiares_nombres: '¿Cómo te enteraste de la vacante?\n1️⃣ Familia\n2️⃣ Bolsa de trabajo – Rio Logística\n3️⃣ Referido \n4️⃣ Reingreso\n\nResponde con el número 👇',
+  referidos_familiares_nombres: '¿Cómo te enteraste de la vacante?\n1️⃣ Familia\n2️⃣ Bolsa de trabajo – Rio Logística\n3️⃣ Referido\n4️⃣ Reingreso\n\nResponde con el número 👇',
 };
 
 const Q_UBICACION     = 'Trabajamos en dos ubicaciones 📍\n1️⃣ Azcapotzalco (CDMX)\n2️⃣ Cuautitlán Izcalli (EdoMex)\n\n¿A cuál te queda mejor acudir? Responde 1 o 2 👇';
@@ -50,7 +68,7 @@ const FU_CUALES       = '¿Cuáles? Cuéntame un poco para dejarlo registrado. �
 const FU_BOTAS        = '¿Podrías conseguirlas antes de ingresar? 👢';
 const FU_DEP_CUANTOS  = '¿Cuántos dependientes económicos tienes a tu cargo? (Si no tienes, dime "ninguno")';
 const FU_CUAL_CREDITO = '¿Cuál de los dos: Infonavit o Fonacot?';
-const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones. Y tu estado de cuenta, ambos actualizados 📄 ¿Los tienes o puedes conseguirlos?';
+const FU_INFONAVIT    = 'Para el expediente necesitaremos tu hoja de retenciones y tu estado de cuenta, ambos actualizados 📄 ¿Los tienes o puedes conseguirlos?';
 const FU_REF_NOMBRE   = '¡Qué bien! ¿Cuál es el nombre completo de quien te refirió?';
 const FU_DOC          = 'Sin problema 😊 ¿Puedes conseguir o completar lo que te falta antes de ingresar?';
 const Q_BANCO         = 'Nuestros pagos de nómina se realizan a través de Banco Santander 🏦\n1️⃣ Estoy de acuerdo\n2️⃣ Tengo un adeudo, bloqueo o aclaración pendiente\n\nResponde con el número 👇';
@@ -58,10 +76,11 @@ const Q_CORREGIR      = 'Con gusto lo corrijo 🙂 ¿Qué dato quieres cambiar? 
 const CIERRE_MENOR    = 'Agradecemos mucho tu interés y el tiempo que te tomaste 🙏 Sin embargo, por disposición legal necesitamos que seas mayor de edad (18 años o más) para continuar, por lo que tu proceso ha concluido por ahora. Te deseamos mucho éxito. 😊';
 const CIERRE_ZONA     = 'Entendido 🙏 Por ahora solo tenemos vacantes en Azcapotzalco (CDMX) y Cuautitlán Izcalli (EdoMex). Si más adelante puedes acudir a alguna, con gusto te atendemos. ¡Mucho éxito! 😊';
 
-const OPC_ESTADO_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Otro'];
-const OPC_ESCOLARIDAD  = ['Primaria', 'Secundaria', 'Preparatoria', 'Universidad', 'Otro'];
-const OPC_AREAS        = ['Surtido', 'Empaquetado', 'Acomodo', 'Etiquetado'];
-const OPC_MOTIVO       = ['Preferencia económica', 'Distancia', 'Personal-Familiar'];
+const OPC_ESTADO_CIVIL    = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Otro'];
+const OPC_ESCOLARIDAD_PRH = ['Primaria', 'Secundaria', 'Preparatoria', 'Universidad', 'Otro'];
+const OPC_ESCOLARIDAD_UPS = ['Secundaria', 'Preparatoria', 'Universidad'];
+const OPC_AREAS           = ['Surtido', 'Empaquetado', 'Acomodo', 'Etiquetado'];
+const OPC_MOTIVO          = ['Preferencia económica', 'Distancia', 'Prestaciones de ley', 'Personal-Familiar'];
 
 const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 
@@ -83,7 +102,7 @@ const TEXT_DOC = `Para continuar, necesitarás la siguiente documentación 📋
 ¿Cuentas con toda esta documentación actualizada?`;
 
 const cierreTexto = (nombre: any): string =>
-  `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. Compartenos tu solicitud o CV por este medio. ¡Gracias por tu interés!`;
+  `¡Listo${nombre ? ', ' + nombre : ''}! 🙌 Hemos registrado tu postulación correctamente. Te recordamos que este registro no garantiza la contratación ni el avance en el proceso. Si tu perfil es seleccionado, te contactaremos. ¡Gracias por tu interés!`;
 
 /* ── Helpers ── */
 const norm = (s: any = ''): string => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -134,7 +153,7 @@ El candidato puede responder con faltas de ortografía, abreviaturas, de forma i
  "numero": <entero> | null,
  "turno": "Matutino" | "Vespertino" | "Nocturno" | null,
  "texto": "<la respuesta del candidato, en texto limpio y bien escrito>",
- "correccion_campo": null | "<uno de: ${CAMPOS.join(', ')}>",
+ "correccion_campo": null | "<uno de: ${ALL_CAMPOS.join(', ')}>",
  "correccion_valor": null | <valor nuevo>
 }
 Reglas:
@@ -159,7 +178,7 @@ Reglas:
       numero: (typeof p.numero === 'number') ? Math.round(p.numero) : (p.numero != null && !isNaN(parseInt(String(p.numero),10)) ? parseInt(String(p.numero),10) : null),
       turno: ['Matutino','Vespertino','Nocturno'].includes(p.turno) ? p.turno : null,
       texto: (typeof p.texto === 'string' && p.texto.trim()) ? p.texto.trim() : String(msg).trim(),
-      correccion_campo: CAMPOS.includes(p.correccion_campo) ? p.correccion_campo : null,
+      correccion_campo: ALL_CAMPOS.includes(p.correccion_campo) ? p.correccion_campo : null,
       correccion_valor: p.correccion_valor ?? null
     };
   } catch { return fallback; }
@@ -202,8 +221,8 @@ function procesarSimple(campo: string, I: Interp, msgRaw: any): { valor?: any, r
 }
 
 function vacante(cedis: string | null): string {
-  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (7am - 4pm)\n2️⃣ Vespertino (1pm - 10pm)\n3️⃣ Nocturno (10pm - 7am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
-  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli 📦\n\n💰 Sueldo de $2,205 + bono de $295 por puntualidad. Prestaciones de ley.\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (8am - 6pm)\n2️⃣ Vespertino (11am - 10pm)\n3️⃣ Nocturno (10pm - 6am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
+  if (cedis === 'Editorial') return `Tenemos una vacante de Auxiliar de Almacén en Azcapotzalco, CDMX 📦\n\n💰 Sueldo de $2,205 + bono de $195 por puntualidad. Prestaciones de ley.\n📅 De lunes a sábado\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (7am - 4pm)\n2️⃣ Vespertino (1pm - 10pm)\n3️⃣ Nocturno (10pm - 7am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
+  if (cedis === 'UPS') return `Tenemos una vacante de Auxiliar de Almacén en El Sabino, Cuautitlán Izcalli (EdoMex) 📦\n\n💰 Sueldo de $2,205 + bono de $295 por puntualidad. Prestaciones de ley.\n📅 De lunes a viernes\n\n🕐 Turnos disponibles:\n1️⃣ Matutino (8am - 6pm)\n2️⃣ Vespertino (11am - 9pm)\n3️⃣ Nocturno (10pm - 6am)\n\n¿Te interesa? Responde con el número de tu turno 👇`;
   return Q_UBICACION;
 }
 
@@ -211,6 +230,8 @@ function textoPregunta(campo: string, cedis: string | null): string {
   if (campo === 'turno_preferido') return vacante(cedis);
   if (campo === 'documentacion_completa_original') return TEXT_DOC;
   if (campo === 'cuenta_banco_santander_problemas') return Q_BANCO;
+  if (campo === 'escolaridad_comprobable' && cedis === 'UPS')
+    return '¿Cuál es tu nivel de escolaridad comprobable?\n1️⃣ Secundaria   2️⃣ Preparatoria   3️⃣ Universidad\n\nResponde con el número 👇';
   if (campo === 'es_reingreso') {
     return cedis === 'UPS' ? '¿Has trabajado anteriormente en Rio Logística o en UPS?'
       : cedis === 'Editorial' ? '¿Has trabajado anteriormente en Rio Logística o en Penguin Random House (PRH)?'
@@ -220,12 +241,14 @@ function textoPregunta(campo: string, cedis: string | null): string {
 }
 
 function clasificar(e: any): string {
-  const vertigo = e.sufre_vertigo === true;
   const botas = e.tiene_botas_casquillo;
   const cedis = e.vacante_cedis;
   const banco = norm(e.cuenta_banco_santander_problemas);
   const edad = Number(e.edad);
-  const esRechazo = vertigo || (botas === false && cedis === 'UPS') || (edad && edad < 18);
+  const esRechazo = (edad && edad < 18)
+    || e.sufre_vertigo === true
+    || e.inconveniente_camaras_frias === true
+    || (botas === false && cedis === 'UPS');
   const esPendiente = banco.includes('adeudo') || banco.includes('bloqueo') || banco.includes('aclaracion')
     || (botas === false && cedis !== 'UPS') || (edad && edad > 45);
   return esRechazo ? 'Rechazado' : esPendiente ? 'Pendiente' : 'Candidato Óptimo';
@@ -245,11 +268,14 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   const ultimoUser = [...historial].reverse().find(m => m.role === 'user')?.content || '';
 
   const estado: any = {};
-  CAMPOS.forEach(c => { estado[c] = info?.[c] ?? null; });
+  ALL_CAMPOS.forEach(c => { estado[c] = info?.[c] ?? null; });
   estado.vacante_cedis = info?.vacante_cedis ?? null;
   if ((estado.dependientes_economicos === 0 || String(estado.dependientes_economicos) === '0') && estado.apoyo_cuidado_dependientes == null) {
     estado.apoyo_cuidado_dependientes = 'No aplica';
   }
+
+  const cedisActual = estado.vacante_cedis || detectarCedis(estado.zona_vivienda) || null;
+  const CAMPOS = getCampos(cedisActual);
 
   const empaquetar = (pregunta: string, extraccion: any, estatus: string, cedis: any): string => JSON.stringify({
     pregunta, estatus, cedis: cedis ?? null, extraccion,
@@ -281,9 +307,9 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   if (/que dato quieres cambiar/i.test(norm(ultimoBot))) {
     if (I.correccion_campo && I.correccion_valor != null) {
       const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
-      return empaquetar(`¡Listo, ya lo corregí! 👍\n\n${textoPregunta(campoActual, estado.vacante_cedis)}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
+      return empaquetar(`¡Listo, ya lo corregí! 👍\n\n${textoPregunta(campoActual, cedisActual)}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
     }
-    return empaquetar(`Perfecto, sigamos 🙂\n\n${textoPregunta(campoActual, estado.vacante_cedis)}`, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
+    return empaquetar(`Perfecto, sigamos 🙂\n\n${textoPregunta(campoActual, cedisActual)}`, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
   }
 
   if (pareceSalida(mensajeUsuario)) {
@@ -293,7 +319,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   if (pareceCorreccion(mensajeUsuario)) {
     if (I.correccion_campo && I.correccion_valor != null && estado[I.correccion_campo] != null && I.correccion_campo !== campoActual) {
       const extra: any = {}; extra[I.correccion_campo] = I.correccion_valor;
-      const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, estado.vacante_cedis);
+      const q = (ultimoBot && !/contarme un poco mas/i.test(norm(ultimoBot))) ? ultimoBot : textoPregunta(campoActual, cedisActual);
       return empaquetar(`Listo, ya lo corregí 👍\n\n${q}`, extra, info?.estatus || 'Nuevo', estado.vacante_cedis);
     }
     return empaquetar(Q_CORREGIR, {}, info?.estatus || 'Nuevo', estado.vacante_cedis);
@@ -324,8 +350,9 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else extraccion.estado_civil = I.texto;
   }
   else if (campoActual === 'escolaridad_comprobable') {
+    const opts = cedisActual === 'UPS' ? OPC_ESCOLARIDAD_UPS : OPC_ESCOLARIDAD_PRH;
     const n = soloDigito(mensajeUsuario);
-    if (n && n >= 1 && n <= 5) extraccion.escolaridad_comprobable = OPC_ESCOLARIDAD[n - 1];
+    if (n && n >= 1 && n <= opts.length) extraccion.escolaridad_comprobable = opts[n - 1];
     else if (I.si_no === 'no') extraccion.escolaridad_comprobable = 'Sin escolaridad comprobable';
     else extraccion.escolaridad_comprobable = I.texto;
   }
@@ -343,7 +370,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     if (bucket === null) seguimiento = 'Responde con el número de tu experiencia: 1 (Ninguna), 2 (1-6 meses) o 3 (1 año o más) 👇';
     else {
       extraccion.experiencia_almacen_meses = bucket;
-      if (bucket === 0) { // primer empleo -> saltamos áreas y motivo
+      if (bucket === 0) { // primer empleo -> saltamos áreas y motivo (NO las de farmacéutica/cámaras)
         extraccion.areas_desempenadas = 'Sin experiencia previa';
         extraccion.motivo_salida_anterior = 'Sin empleo anterior';
         extraccion.tiene_constancias_laborales = false;
@@ -362,9 +389,20 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     if (sel.size) extraccion.areas_desempenadas = Array.from(sel).join(', ');
     else extraccion.areas_desempenadas = I.texto;
   }
+  else if (campoActual === 'experiencia_camaras_frias') {
+    if (I.si_no === 'si') { extraccion.experiencia_camaras_frias = true; extraccion.inconveniente_camaras_frias = false; }
+    else if (I.si_no === 'no') { extraccion.experiencia_camaras_frias = false; }
+    else seguimiento = 'Perdona, ¿has trabajado en cámaras frías? Responde sí o no 🙏';
+  }
+  else if (campoActual === 'inconveniente_camaras_frias') {
+    const n = soloDigito(mensajeUsuario);
+    if (n === 1 || I.si_no === 'si') extraccion.inconveniente_camaras_frias = true;
+    else if (n === 2 || I.si_no === 'no') extraccion.inconveniente_camaras_frias = false;
+    else seguimiento = '¿Tienes algún inconveniente en ingresar a cámaras frías? Responde 1 (Sí) o 2 (No) 👇';
+  }
   else if (campoActual === 'motivo_salida_anterior') {
     const n = soloDigito(mensajeUsuario);
-    if (n && n >= 1 && n <= 3) extraccion.motivo_salida_anterior = OPC_MOTIVO[n - 1];
+    if (n && n >= 1 && n <= 4) extraccion.motivo_salida_anterior = OPC_MOTIVO[n - 1];
     else if (sinExperiencia(mensajeUsuario)) { extraccion.motivo_salida_anterior = 'Sin empleo anterior'; extraccion.tiene_constancias_laborales = false; }
     else extraccion.motivo_salida_anterior = I.texto;
   }
@@ -413,6 +451,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
     else if (n === 1 || /familia/.test(s)) extraccion.referidos_familiares_nombres = 'Familia';
     else if (n === 2 || /bolsa/.test(s)) extraccion.referidos_familiares_nombres = 'Bolsa de trabajo – Rio Logística';
     else if (n === 3 || /referid/.test(s)) seguimiento = FU_REF_NOMBRE;
+    else if (n === 4 || /reingreso/.test(s)) extraccion.referidos_familiares_nombres = 'Reingreso';
     else extraccion.referidos_familiares_nombres = I.texto;
   }
   else if (campoActual === 'cuenta_banco_santander_problemas') {
@@ -441,7 +480,7 @@ export const arisBrain = async (mensajeUsuario: any, telefono: any): Promise<str
   const cedis = estadoNuevo.vacante_cedis || detectarCedis(estadoNuevo.zona_vivienda) || detectarCedis(mensajeUsuario) || null;
   estadoNuevo.vacante_cedis = cedis;
 
-  const proximo = CAMPOS.find(c => estadoNuevo[c] == null) || null;
+  const proximo = getCampos(cedis).find(c => estadoNuevo[c] == null) || null;
 
   if (!preamble) {
     if (extraccion.nombre_completo) preamble = `¡Mucho gusto, ${extraccion.nombre_completo}! `;
